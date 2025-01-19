@@ -121,21 +121,59 @@ async function handleSelection() {
                         model: "gpt-4o",
                         messages: [{
                             role: "user",
-                            content: `「${selectedText}」这个单词/短语出现在「${originalText}」这个句子中，分析它在这个句子中的意思，并且如果原文是英文给出国际音标，如果是日语给出平假名音标。`
+                            content: `「${selectedText}」这个单词/短语出现在「${originalText}」这个句子中，分析它在这个句子中的意思`
                         }]
                     })
                 });
+
+                const phoneticResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+                    },
+                    body: JSON.stringify({
+                        model: "gpt-4o",
+                        messages: [{
+                            role: "user",
+                            content: `「${selectedText}」这个单词/短语出现在「${originalText}」这个句子中，给出它的音标，如果是日文给平假名音标，如果是英文给国际音标，除了音标不要任何其他内容`
+                        }]
+                    })
+                });
+
+                const phoneticData = await phoneticResponse.json();
+                const phoneticText = phoneticData.choices[0].message.content.trim();
+                console.debug('音标:', phoneticText);
 
                 const meaningData = await meaningResponse.json();
                 const meaningText = meaningData.choices[0].message.content;
                 console.debug('最常见意思和音标:', meaningText);
 
                 // 添加最常见意思和音标到翻译文本后面
-                existingTranslation.innerHTML += `<br><br>${meaningText}`;
+                existingTranslation.innerHTML += `<br><br>
+                    <div class="selected-text" style="font-size: smaller;">
+                        <div style="display: flex; align-items: center; white-space: nowrap;">${selectedText}(${phoneticText})
+                            <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 24 24"
+                                fill="currentColor"
+                                height="20"
+                                width="24"
+                                class="playbtn"
+                            >
+                                <path
+                                    clipRule="evenodd"
+                                    d="M11.26 3.691A1.2 1.2 0 0 1 12 4.8v14.4a1.199 1.199 0 0 1-2.048.848L5.503 15.6H2.4a1.2 1.2 0 0 1-1.2-1.2V9.6a1.2 1.2 0 0 1 1.2-1.2h3.103l4.449-4.448a1.2 1.2 0 0 1 1.308-.26Zm6.328-.176a1.2 1.2 0 0 1 1.697 0A11.967 11.967 0 0 1 22.8 12a11.966 11.966 0 0 1-3.515 8.485 1.2 1.2 0 0 1-1.697-1.697A9.563 9.563 0 0 0 20.4 12a9.565 9.565 0 0 0-2.812-6.788 1.2 1.2 0 0 1 0-1.697Zm-3.394 3.393a1.2 1.2 0 0 1 1.698 0A7.178 7.178 0 0 1 18 12a7.18 7.18 0 0 1-2.108 5.092 1.2 1.2 0 1 1-1.698-1.698A4.782 4.782 0 0 0 15.6 12a4.78 4.78 0 0 0-1.406-3.394 1.2 1.2 0 0 1 0-1.698Z"
+                                    fillRule="evenodd"
+                                ></path>
+                            </svg>
+                        </div>
+                        <div>${meaningText}</div>
+                    </div>
+                `;
 
-                // 添加播放按钮
-                const playButton = document.createElement('button');
-                playButton.innerText = '播放';
+                // 获取类名为playbtn的svg作为playButton
+                const playButton = existingTranslation.querySelector('.playbtn');
                 playButton.onclick = () => {
                     // 根据文本语言自动选择语音设置
                     const isEnglish = /^[a-zA-Z\s.,!?]+$/.test(selectedText);
@@ -149,7 +187,6 @@ async function handleSelection() {
                     console.log('开始播放语音', selectedText, options);
                     speakText(selectedText, options);
                 };
-                existingTranslation.appendChild(playButton);
 
                 // 取消选中状态
                 selection.removeAllRanges();
@@ -356,6 +393,15 @@ style.textContent = `
         color: #f6f6f6;
         padding: 4px;
         border-radius: 2px;
+    }
+    .play-icon {
+        display: inline-flex;
+        align-items: center;
+    }
+    .play-icon svg {
+        width: 16px;
+        height: 16px;
+        margin-left: 4px;
     }
 `;
 document.head.appendChild(style);
