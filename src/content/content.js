@@ -161,6 +161,27 @@ async function handleSelection() {
             }
         }
 
+        // 修改这部分逻辑来处理文本节点和br标签
+        let insertAfterNode = range.startContainer;
+
+        console.log('insertAfterNode:', insertAfterNode);
+        
+        // 如果结束容器是文本节点，需要找到它后面的第一个br标签或者使用文本节点本身
+        if (insertAfterNode.nodeType === Node.TEXT_NODE) {
+            let nextSibling = insertAfterNode.nextSibling;
+            while (nextSibling) {
+                if (nextSibling.nodeName === 'BR') {
+                    insertAfterNode = nextSibling;
+                    break;
+                }
+                // 如果遇到了另一个文本节点，说明没有br标签分隔，就使用当前文本节点
+                if (nextSibling.nodeType === Node.TEXT_NODE) {
+                    break;
+                }
+                nextSibling = nextSibling.nextSibling;
+            }
+        }
+
         // 创建新的翻译段落
         const translatedParagraph = document.createElement('p');
         translatedParagraph.className = 'translation-paragraph';
@@ -169,7 +190,7 @@ async function handleSelection() {
 
         // 插入DOM元素
         translatedParagraphs.set(targetNode, translatedParagraph);
-        targetNode.insertAdjacentElement('afterend', translatedParagraph);
+        insertAfterNode.parentNode.insertBefore(translatedParagraph, insertAfterNode.nextSibling);
         console.debug('创建的翻译段落:', translatedParagraph);
 
         // 获取翻译
