@@ -100,6 +100,10 @@ async function createNewTranslation(targetNode: Element, selectedText: string, r
     
     // 计算亮度
     const getBrightness = (color: string) => {
+        // 如果是透明色,返回255(最亮)
+        if (color === 'rgba(0, 0, 0, 0)') {
+            return 255;
+        }
         const rgb = color.match(/\d+/g);
         if (!rgb) return 0;
         return (parseInt(rgb[0]) * 299 + parseInt(rgb[1]) * 587 + parseInt(rgb[2]) * 114) / 1000;
