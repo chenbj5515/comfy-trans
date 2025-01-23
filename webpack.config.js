@@ -10,7 +10,7 @@ export default {
     mode: 'development',
     devtool: 'source-map',
     entry: {
-        content: './src/content/content.js',
+        content: './src/content/content.ts',
     },
     output: {
         path: path.resolve(__dirname, 'dist'),
@@ -23,7 +23,7 @@ export default {
     module: {
         rules: [
             {
-                test: /\.js$/,
+                test: /\.(ts|js)x?$/,
                 exclude: /node_modules/,
                 use: {
                     loader: 'babel-loader',
@@ -33,7 +33,8 @@ export default {
                                 targets: {
                                     chrome: "88"
                                 }
-                            }]
+                            }],
+                            '@babel/preset-typescript'
                         ]
                     }
                 }
@@ -63,7 +64,7 @@ export default {
         })
     ],
     resolve: {
-        extensions: ['.js'],
+        extensions: ['.tsx', '.ts', '.js'],
         fallback: {
             "path": false,
             "fs": false
