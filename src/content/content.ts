@@ -7,10 +7,14 @@ import { createTranslatedParagraph, findInsertPosition, getTargetNode, insertTra
 let pageContext = '';
 
 // 存储已翻译段落的映射
-const translatedParagraphs = new Map<Node, HTMLParagraphElement>();
+const translatedParagraphs = new Map<Node, {
+    translatedParagraph: HTMLParagraphElement,
+    originalText: string,
+    translationText: string
+}>();
 
 // 存储选中的文本和翻译的映射
-const translationMap = new Map<string, TranslationMapValue>();
+// const translationMap = new Map<string, TranslationMapValue>();
 
 // 初始化函数
 async function initialize() {
@@ -28,29 +32,32 @@ async function processSelection(selection: Selection, selectedText: string) {
     const range = selection.getRangeAt(0);
     const targetNode = getTargetNode(range);
 
+    console.log('targetNode===========', targetNode);
+
     if (!targetNode) {
         console.log('未找到选中文本所在元素');
         return;
     }
 
-    const paragraphInfo = translatedParagraphs.get(targetNode);
+    const paragraphInfo = translatedParagraphs.get(targetNode)?.translatedParagraph;
     if (paragraphInfo) {
         handleExistingTranslation(paragraphInfo, targetNode, selectedText, range, selection);
     } else {
-        await createNewTranslation(targetNode, selectedText, range);
+        await createNewTranslation(targetNode, targetNode.textContent || "", range);
     }
 }
 
 // 段落的翻译已经存在的情况
 async function handleExistingTranslation(
     existingTranslation: HTMLParagraphElement,
-    targetNode: Element,
+    targetNode: Node,
     selectedText: string,
     range: Range,
     selection: Selection
 ): Promise<boolean> {
-    const paragraphId = targetNode.id;
-    const translationData = translationMap.get(paragraphId);
+    // const paragraphId = targetNode.id;
+    // const translationData = translationMap.get(paragraphId);
+    const translationData = translatedParagraphs.get(targetNode);
 
     if (translationData?.originalText && translationData.originalText.includes(selectedText)) {
         await updateExistingTranslation(existingTranslation, selectedText, translationData.originalText, range);
@@ -91,33 +98,33 @@ async function updateExistingTranslation(
     }
 }
 
+// 计算亮度
+const getBrightness = (color: string) => {
+    // 如果是透明色,返回255(最亮)
+    if (color === 'rgba(0, 0, 0, 0)') {
+        return 255;
+    }
+    const rgb = color.match(/\d+/g);
+    if (!rgb) return 0;
+    return (parseInt(rgb[0]) * 299 + parseInt(rgb[1]) * 587 + parseInt(rgb[2]) * 114) / 1000;
+};
+
 // 创建新的翻译
-async function createNewTranslation(targetNode: Element, selectedText: string, range: Range) {
+async function createNewTranslation(targetNode: Node, selectedText: string, range: Range) {
     // 获取选中文本的计算样式
-    const computedStyle = window.getComputedStyle(targetNode);
+    const computedStyle = window.getComputedStyle(targetNode.parentElement!);
     const backgroundColor = computedStyle.backgroundColor;
     const color = computedStyle.color;
-    
-    // 计算亮度
-    const getBrightness = (color: string) => {
-        // 如果是透明色,返回255(最亮)
-        if (color === 'rgba(0, 0, 0, 0)') {
-            return 255;
-        }
-        const rgb = color.match(/\d+/g);
-        if (!rgb) return 0;
-        return (parseInt(rgb[0]) * 299 + parseInt(rgb[1]) * 587 + parseInt(rgb[2]) * 114) / 1000;
-    };
-    
+
     const backgroundBrightness = getBrightness(backgroundColor);
     const textBrightness = getBrightness(color);
-    
+
     // 判断是否为暗色模式
     const isDarkMode = backgroundBrightness < 128 || textBrightness > 128;
-    
+
     const insertAfterNode = findInsertPosition(range.startContainer);
     const translatedParagraph = createTranslatedParagraph(targetNode);
-    
+
     // 根据模式设置样式类
     translatedParagraph.className = isDarkMode ? 'translation-paragraph dark-theme' : 'translation-paragraph light-theme';
 
@@ -131,8 +138,7 @@ async function createNewTranslation(targetNode: Element, selectedText: string, r
         };
 
         insertTranslatedParagraph(translatedParagraph, insertPosition);
-        translatedParagraphs.set(targetNode, translatedParagraph);
-
+        
         // 创建翻译内容的div容器
         const translationDiv = document.createElement('div');
         translationDiv.id = 'translation-content-' + Math.random().toString(36).substring(2, 15);
@@ -147,10 +153,13 @@ async function createNewTranslation(targetNode: Element, selectedText: string, r
                 translationText += chunk;
             }
         }
-        translationMap.set(targetNode.id, {
+
+        translatedParagraphs.set(targetNode, {
+            translatedParagraph,
             originalText: selectedText,
-            translationText: translationText
+            translationText
         });
+
     } else {
         console.error('无法找到有效的插入位置');
     }

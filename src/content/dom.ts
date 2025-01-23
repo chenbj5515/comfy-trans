@@ -2,18 +2,20 @@ import { InsertPosition } from "./types";
 import { speakText } from "./audio";
 
 // 获取目标节点
-export function getTargetNode(range: Range): Element | null {
+export function getTargetNode(range: Range): Node | null {
     let startContainer: Node | null = range.startContainer;
-    let endContainer: Node | null = range.endContainer;
+    // let endContainer: Node | null = range.endContainer;
+    console.log('startContainer===========', startContainer, startContainer?.nodeType);
+    // console.log('endContainer===========', endContainer);
 
     if (startContainer.nodeType === Node.TEXT_NODE) {
-        startContainer = startContainer.parentElement;
+        startContainer = startContainer;
     }
-    if (endContainer.nodeType === Node.TEXT_NODE) {
-        endContainer = endContainer.parentElement;
-    }
+    // if (endContainer.nodeType === Node.TEXT_NODE) {
+    //     endContainer = endContainer;
+    // }
 
-    return startContainer as Element;
+    return startContainer;
 }
 
 // 查找插入位置
