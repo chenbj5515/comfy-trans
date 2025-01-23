@@ -93,8 +93,29 @@ async function updateExistingTranslation(
 
 // 创建新的翻译
 async function createNewTranslation(targetNode: Element, selectedText: string, range: Range) {
+    // 获取选中文本的计算样式
+    const computedStyle = window.getComputedStyle(targetNode);
+    const backgroundColor = computedStyle.backgroundColor;
+    const color = computedStyle.color;
+    
+    // 计算亮度
+    const getBrightness = (color: string) => {
+        const rgb = color.match(/\d+/g);
+        if (!rgb) return 0;
+        return (parseInt(rgb[0]) * 299 + parseInt(rgb[1]) * 587 + parseInt(rgb[2]) * 114) / 1000;
+    };
+    
+    const backgroundBrightness = getBrightness(backgroundColor);
+    const textBrightness = getBrightness(color);
+    
+    // 判断是否为暗色模式
+    const isDarkMode = backgroundBrightness < 128 || textBrightness > 128;
+    
     const insertAfterNode = findInsertPosition(range.startContainer);
     const translatedParagraph = createTranslatedParagraph(targetNode);
+    
+    // 根据模式设置样式类
+    translatedParagraph.className = isDarkMode ? 'translation-paragraph dark-theme' : 'translation-paragraph light-theme';
 
     if (insertAfterNode && insertAfterNode.parentNode) {
         const insertPosition: InsertPosition = {

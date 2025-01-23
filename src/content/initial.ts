@@ -18,23 +18,43 @@ export async function initializePageContext() {
     return pageContext;
 }
 
+// 判断颜色是否为浅色
+function isLightColor(color: string): boolean {
+    // 移除空格和rgb/rgba前缀
+    color = color.replace(/\s/g, '').toLowerCase();
+    let r, g, b;
+    
+    if (color.startsWith('rgb(')) {
+        [r, g, b] = color.slice(4, -1).split(',').map(Number);
+    } else if (color.startsWith('rgba(')) {
+        [r, g, b] = color.slice(5, -1).split(',').map(Number);
+    } else {
+        return false;
+    }
+    
+    // 计算亮度 (基于人眼对不同颜色的敏感度)
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+    return brightness > 128;
+}
+
 // 初始化样式
 export function initializeStyles() {
     const style = document.createElement('style');
     style.textContent = `
         .translation-paragraph {
             margin-top: 10px;
-            color: #666;
             padding: 10px;
-            border: 1px solid #ddd;
             border-radius: 4px;
+        }
+        .translation-paragraph.light-theme {
+            color: #666;
+            border: 1px solid #ddd;
             background-color: #f9f9f9;
         }
-        .highlighted {
-            background-color: #333333;
-            color: #f6f6f6;
-            padding: 4px;
-            border-radius: 2px;
+        .translation-paragraph.dark-theme {
+            color: inherit;
+            border: 1px solid #444;
+            background-color: #2d2d2d;
         }
         .play-icon {
             display: inline-flex;
@@ -70,4 +90,3 @@ export function listenSelection(processSelection: (selection: Selection, selecte
         }, 1500);
     }
 }
-
