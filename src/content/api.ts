@@ -1,9 +1,41 @@
 export async function askAIStream(input: string, model: string = 'gpt-4-turbo') {
+    const apiKey = await getApiKey();
+    
+    if (!apiKey) {
+        const stream = new ReadableStream({
+            start(controller) {
+                controller.enqueue("请设置OPENAI API KEY");
+                controller.close();
+            }
+        });
+
+        return {
+            [Symbol.asyncIterator]() {
+                const reader = stream.getReader();
+                return {
+                    async next() {
+                        try {
+                            const { done, value } = await reader.read();
+                            if (done) {
+                                reader.releaseLock();
+                                return { done: true, value: undefined };
+                            }
+                            return { done: false, value };
+                        } catch (e) {
+                            reader.releaseLock();
+                            throw e;
+                        }
+                    }
+                };
+            }
+        };
+    }
+
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+            'Authorization': `Bearer ${apiKey}`
         },
         body: JSON.stringify({
             model,
@@ -14,6 +46,36 @@ export async function askAIStream(input: string, model: string = 'gpt-4-turbo') 
             stream: true,
         })
     });
+
+    if (response.status === 401) {
+        const stream = new ReadableStream({
+            start(controller) {
+                controller.enqueue("OPENAI API KEY格式不正确");
+                controller.close();
+            }
+        });
+
+        return {
+            [Symbol.asyncIterator]() {
+                const reader = stream.getReader();
+                return {
+                    async next() {
+                        try {
+                            const { done, value } = await reader.read();
+                            if (done) {
+                                reader.releaseLock();
+                                return { done: true, value: undefined };
+                            }
+                            return { done: false, value };
+                        } catch (e) {
+                            reader.releaseLock();
+                            throw e;
+                        }
+                    }
+                };
+            }
+        };
+    }
 
     if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -40,7 +102,7 @@ export async function askAIStream(input: string, model: string = 'gpt-4-turbo') 
                         if (line.startsWith('data: ')) {
                             const jsonData = line.slice(6);
                             if (jsonData === '[DONE]') continue;
-                            
+
                             try {
                                 const data = JSON.parse(jsonData);
                                 const content = data.choices[0].delta.content;
@@ -84,11 +146,17 @@ export async function askAIStream(input: string, model: string = 'gpt-4-turbo') 
 }
 
 export async function askAI(prompt: string, model: string = 'gpt-4-turbo'): Promise<string> {
+    const apiKey = await getApiKey();
+    
+    if (!apiKey) {
+        return "请设置OPENAI API KEY";
+    }
+
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+            'Authorization': `Bearer ${apiKey}`
         },
         body: JSON.stringify({
             model,
@@ -102,8 +170,10 @@ export async function askAI(prompt: string, model: string = 'gpt-4-turbo'): Prom
         })
     });
 
+    if (response.status === 401) {
+        return "OPENAI API KEY格式不正确";
+    }
 
-    console.log(response);
     if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -112,5 +182,12 @@ export async function askAI(prompt: string, model: string = 'gpt-4-turbo'): Prom
     return data.choices[0].message.content;
 }
 
-
-
+// 获取API Key
+async function getApiKey(): Promise<string> {
+    return new Promise((resolve) => {
+        // @ts-ignore
+        chrome.storage.sync.get(['openai_api_key'], (result: { openai_api_key?: string }) => {
+            resolve(result.openai_api_key || '');
+        });
+    });
+}

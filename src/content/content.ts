@@ -14,7 +14,6 @@ const translatedParagraphs = new Map<Node, {
     translationText: string
 }>();
 
-
 // 初始化函数
 async function initialize() {
     pageContext = await initializePageContext();

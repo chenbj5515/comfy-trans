@@ -11,6 +11,7 @@ export default {
     devtool: 'source-map',
     entry: {
         content: './src/content/content.ts',
+        popup: './src/popup.js'
     },
     output: {
         path: path.resolve(__dirname, 'dist'),
@@ -57,6 +58,14 @@ export default {
                         return JSON.stringify(manifest, null, 2);
                     }
                 },
+                {
+                    from: './src/images',
+                    to: 'images'
+                },
+                {
+                    from: './src/popup.html',
+                    to: 'popup.html'
+                }
             ]
         }),
         new Dotenv({
