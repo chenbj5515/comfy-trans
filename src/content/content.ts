@@ -13,8 +13,6 @@ const translatedParagraphs = new Map<Node, {
     translationText: string
 }>();
 
-// 存储选中的文本和翻译的映射
-// const translationMap = new Map<string, TranslationMapValue>();
 
 // 初始化函数
 async function initialize() {
@@ -31,8 +29,6 @@ async function processSelection(selection: Selection, selectedText: string) {
 
     const range = selection.getRangeAt(0);
     const targetNode = getTargetNode(range);
-
-    console.log('targetNode===========', targetNode);
 
     if (!targetNode) {
         console.log('未找到选中文本所在元素');
@@ -55,8 +51,6 @@ async function handleExistingTranslation(
     range: Range,
     selection: Selection
 ): Promise<boolean> {
-    // const paragraphId = targetNode.id;
-    // const translationData = translationMap.get(paragraphId);
     const translationData = translatedParagraphs.get(targetNode);
 
     if (translationData?.originalText && translationData.originalText.includes(selectedText)) {
@@ -79,16 +73,21 @@ async function updateExistingTranslation(
 
     // 创建含义和音标的容器
     existingTranslation.appendChild(document.createElement('div'));
+    
+    // 判断是否为纯日文(只包含平假名或片假名)
+    const isOnlyJapaneseKana = /^[\u3040-\u309F\u30A0-\u30FF]+$/.test(selectedText);
+    
+    console.log('isOnlyJapaneseKana===========', isOnlyJapaneseKana);
 
     // 获取音标
-    const phoneticText = await askAI(`「${selectedText}」这个单词/短语出现在「${originalText}」这个句子中，给出它的音标，如果是日文给平假名音标，如果是英文给国际音标，除了音标不要任何其他内容`);
+    const phoneticText = isOnlyJapaneseKana ? '' : await askAI(`「${selectedText}」这个单词/短语出现在「${originalText}」这个句子中，给出它的音标，如果是日文给平假名音标，如果是英文给国际音标，除了音标不要任何其他内容`);
 
     // 生成随机ID
     const selectedTextID = 'selected-text-' + Math.random().toString(36).substring(2, 15);
 
     appendLexicalUnit(existingTranslation, selectedText, phoneticText, selectedTextID);
 
-    const stream = await askAIStream(`「${selectedText}」这个单词/短语出现在「${originalText}」这个句子中，分析它在这个句子中的意思。你只需要重点分析这个单词，不需要翻译整个句子。还有，如果这个词的词源可考的话也要说明出来。`);
+    const stream = await askAIStream(`「${selectedText}」这个单词/短语出现在「${originalText}」这个句子中，简洁明了地分析它在这个句子中的意思。你只需要重点分析这个单词，不需要翻译整个句子。还有，如果这个词的词源可考的话也要说明出来。`);
 
     for await (const chunk of stream) {
         const selectedTextElement = document.getElementById(selectedTextID);
@@ -138,7 +137,6 @@ async function createNewTranslation(targetNode: Node, selectedText: string, rang
         };
 
         insertTranslatedParagraph(translatedParagraph, insertPosition);
-        
         // 创建翻译内容的div容器
         const translationDiv = document.createElement('div');
         translationDiv.id = 'translation-content-' + Math.random().toString(36).substring(2, 15);

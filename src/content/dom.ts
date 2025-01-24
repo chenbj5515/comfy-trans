@@ -3,17 +3,11 @@ import { speakText } from "./audio";
 
 // 获取目标节点
 export function getTargetNode(range: Range): Node | null {
-    let startContainer: Node | null = range.startContainer;
-    // let endContainer: Node | null = range.endContainer;
-    console.log('startContainer===========', startContainer, startContainer?.nodeType);
-    // console.log('endContainer===========', endContainer);
+    let startContainer: Node | null = range.startContainer;    // console.log('endContainer===========', endContainer);
 
     if (startContainer.nodeType === Node.TEXT_NODE) {
         startContainer = startContainer;
     }
-    // if (endContainer.nodeType === Node.TEXT_NODE) {
-    //     endContainer = endContainer;
-    // }
 
     return startContainer;
 }
@@ -67,7 +61,8 @@ export function appendLexicalUnit(translationParagraph: HTMLParagraphElement, se
     textContainer.style.cssText = 'display: flex; align-items: center; white-space: nowrap; font-weight: bold;';
     
     // 添加文本和音标
-    textContainer.appendChild(document.createTextNode(`${selectedText}(${phoneticText})`));
+    const displayText = phoneticText ? `${selectedText}(${phoneticText})` : selectedText;
+    textContainer.appendChild(document.createTextNode(displayText));
     
     // 添加间隔
     const spacer = document.createElement('span');

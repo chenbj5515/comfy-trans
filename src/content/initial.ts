@@ -23,7 +23,7 @@ function isLightColor(color: string): boolean {
     // 移除空格和rgb/rgba前缀
     color = color.replace(/\s/g, '').toLowerCase();
     let r, g, b;
-    
+
     if (color.startsWith('rgb(')) {
         [r, g, b] = color.slice(4, -1).split(',').map(Number);
     } else if (color.startsWith('rgba(')) {
@@ -31,7 +31,7 @@ function isLightColor(color: string): boolean {
     } else {
         return false;
     }
-    
+
     // 计算亮度 (基于人眼对不同颜色的敏感度)
     const brightness = (r * 299 + g * 587 + b * 114) / 1000;
     return brightness > 128;
@@ -50,11 +50,13 @@ export function initializeStyles() {
             color: #666;
             border: 1px solid #ddd;
             background-color: #f9f9f9;
+            margin-bottom: 10px;
         }
         .translation-paragraph.dark-theme {
             color: inherit;
             border: 1px solid #444;
             background-color: #2d2d2d;
+            margin-bottom: 10px;
         }
         .play-icon {
             display: inline-flex;
@@ -64,6 +66,9 @@ export function initializeStyles() {
             width: 16px;
             height: 16px;
             margin-left: 4px;
+        }
+        .selected-text {
+            margin-top: 10px;
         }
     `;
     document.head.appendChild(style);
