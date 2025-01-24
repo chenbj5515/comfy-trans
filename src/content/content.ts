@@ -1,5 +1,5 @@
 import { askAIStream, askAI } from './api';
-import { TranslationMapValue, InsertPosition } from './types';
+import { InsertPosition } from './types';
 import { initializePageContext, initializeStyles, listenSelection } from "./initial";
 import { createTranslatedParagraph, findInsertPosition, getTargetNode, insertTranslatedParagraph, appendLexicalUnit, addUnderlineToSelection } from "./dom";
 
@@ -77,8 +77,6 @@ async function updateExistingTranslation(
     // 判断是否为纯日文(只包含平假名或片假名)
     const isOnlyJapaneseKana = /^[\u3040-\u309F\u30A0-\u30FF]+$/.test(selectedText);
     
-    console.log('isOnlyJapaneseKana===========', isOnlyJapaneseKana);
-
     // 获取音标
     const phoneticText = isOnlyJapaneseKana ? '' : await askAI(`「${selectedText}」这个单词/短语出现在「${originalText}」这个句子中，给出它的音标，如果是日文给平假名音标，如果是英文给国际音标，除了音标不要任何其他内容`);
 
@@ -109,9 +107,9 @@ const getBrightness = (color: string) => {
 };
 
 // 创建新的翻译
-async function createNewTranslation(targetNode: Node, selectedText: string, range: Range) {
+async function createNewTranslation(targetNode: Element, selectedText: string, range: Range) {
     // 获取选中文本的计算样式
-    const computedStyle = window.getComputedStyle(targetNode.parentElement!);
+    const computedStyle = window.getComputedStyle(targetNode);
     const backgroundColor = computedStyle.backgroundColor;
     const color = computedStyle.color;
 
@@ -121,7 +119,7 @@ async function createNewTranslation(targetNode: Node, selectedText: string, rang
     // 判断是否为暗色模式
     const isDarkMode = backgroundBrightness < 128 || textBrightness > 128;
 
-    const insertAfterNode = findInsertPosition(range.startContainer);
+    const insertAfterNode = findInsertPosition(targetNode);
     const translatedParagraph = createTranslatedParagraph(targetNode);
 
     // 根据模式设置样式类

@@ -2,14 +2,14 @@ import { InsertPosition } from "./types";
 import { speakText } from "./audio";
 
 // 获取目标节点
-export function getTargetNode(range: Range): Node | null {
-    let startContainer: Node | null = range.startContainer;    // console.log('endContainer===========', endContainer);
+export function getTargetNode(range: Range): Element | null {
+    let targetNode: Node | null = range.startContainer;
 
-    if (startContainer.nodeType === Node.TEXT_NODE) {
-        startContainer = startContainer;
+    if (targetNode.nodeType === Node.TEXT_NODE) {
+        targetNode = targetNode.parentElement;
     }
 
-    return startContainer;
+    return targetNode as Element;
 }
 
 // 查找插入位置
