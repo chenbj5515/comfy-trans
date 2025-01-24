@@ -19,9 +19,15 @@ export const speakText = (text: string, options?: IOptions, onFinish?: () => voi
         process.env.NEXT_PUBLIC_SUBSCRIPTION_KEY!,
         process.env.NEXT_PUBLIC_REGION!
     );
-    const voicerName = options?.voicerName || "ja-JP-NanamiNeural";
 
-    speechConfig.speechSynthesisVoiceName = voicerName;
+    // 判断文本是否为日文
+    const isJapanese = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(text);
+    // 根据文本语言选择发音人
+    const voicerName = isJapanese 
+        ? "ja-JP-NanamiNeural"  // 日文发音人
+        : "en-US-JennyNeural";  // 英文发音人
+
+    speechConfig.speechSynthesisVoiceName = options?.voicerName || voicerName;
     speechConfig.speechSynthesisOutputFormat = 8;
     const complete_cb = function () {
         synthesizer?.close();
