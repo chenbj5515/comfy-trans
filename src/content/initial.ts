@@ -18,25 +18,6 @@ export async function initializePageContext() {
     return pageContext;
 }
 
-// 判断颜色是否为浅色
-function isLightColor(color: string): boolean {
-    // 移除空格和rgb/rgba前缀
-    color = color.replace(/\s/g, '').toLowerCase();
-    let r, g, b;
-
-    if (color.startsWith('rgb(')) {
-        [r, g, b] = color.slice(4, -1).split(',').map(Number);
-    } else if (color.startsWith('rgba(')) {
-        [r, g, b] = color.slice(5, -1).split(',').map(Number);
-    } else {
-        return false;
-    }
-
-    // 计算亮度 (基于人眼对不同颜色的敏感度)
-    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-    return brightness > 128;
-}
-
 // 初始化样式
 export function initializeStyles() {
     const style = document.createElement('style');
@@ -84,8 +65,21 @@ export function listenSelection(processSelection: (selection: Selection, selecte
         const selection = window.getSelection();
         if (!selection) return;
         const selectedText = selection.toString().trim();
+        console.log('selectedText===========', selectedText);
 
         if (!selectedText) return;
+
+        // 检查选中的元素是否在 translation-paragraph 下
+        const range = selection.getRangeAt(0);
+        let currentNode: Node | null = range.startContainer;
+        while (currentNode && currentNode !== document.body) {
+            if (currentNode instanceof Element && 
+                currentNode.classList.contains('translation-paragraph')) {
+                return;
+            }
+            currentNode = currentNode.parentNode;
+        }
+
         if (selectionTimer) {
             clearTimeout(selectionTimer);
         }

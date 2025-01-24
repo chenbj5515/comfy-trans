@@ -2,6 +2,7 @@ import { askAIStream, askAI } from './api';
 import { InsertPosition } from './types';
 import { initializePageContext, initializeStyles, listenSelection } from "./initial";
 import { createTranslatedParagraph, findInsertPosition, getTargetNode, insertTranslatedParagraph, appendLexicalUnit, addUnderlineToSelection } from "./dom";
+import { isChineseText } from './utils';
 
 // 存储页面上下文
 let pageContext = '';
@@ -24,6 +25,12 @@ async function initialize() {
 // 处理选中文本事件
 async function processSelection(selection: Selection, selectedText: string) {
     if (!selection.rangeCount) {
+        return;
+    }
+
+    // 检查是否为中文或日文
+    if (isChineseText(selectedText)) {
+        console.log('检测到中文文本，跳过翻译:', selectedText);
         return;
     }
 
@@ -53,7 +60,7 @@ async function handleExistingTranslation(
 ): Promise<boolean> {
     const translationData = translatedParagraphs.get(targetNode);
 
-    if (translationData?.originalText && translationData.originalText.includes(selectedText)) {
+    if (translationData?.originalText && translationData.originalText.includes(selectedText) && translationData.originalText !== selectedText) {
         await updateExistingTranslation(existingTranslation, selectedText, translationData.originalText, range);
         selection.removeAllRanges();
         return true;
