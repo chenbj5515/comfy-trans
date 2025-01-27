@@ -1,8 +1,8 @@
 import { askAIStream, askAI } from './api';
 import { InsertPosition } from './types';
-import { initializePageContext, initializeStyles, listenSelection } from "./initial";
+import { initializeStyles } from "./initial";
 import { createTranslatedParagraph, findInsertPosition, getTargetNode, insertTranslatedParagraph, appendLexicalUnit, addUnderlineToSelection } from "./dom";
-import { isChineseText } from './utils';
+import { checkBlacklist, isChineseText } from './utils';
 
 // 存储页面上下文
 let pageContext = '';
@@ -16,9 +16,24 @@ const translatedParagraphs = new Map<Node, {
 
 // 初始化函数
 async function initialize() {
-    pageContext = await initializePageContext();
+    const isBlacklist = await checkBlacklist();
+    console.log('isBlacklist', isBlacklist);
+    if (isBlacklist) {
+        return;
+    }
+    pageContext = document.body.innerText.slice(0, 1000); // 获取页面前1000个字符作为上下文
     initializeStyles();
-    listenSelection(processSelection);
+    
+    // 监听键盘事件
+    document.addEventListener('keydown', (e) => {
+        if (e.key.toLowerCase() === 't') {
+            const selection = window.getSelection();
+            if (!selection || !selection.toString()) {
+                return;
+            }
+            processSelection(selection, selection.toString());
+        }
+    });
 }
 
 // 处理选中文本事件

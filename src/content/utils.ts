@@ -17,3 +17,24 @@ export function isChineseText(text: string): boolean {
     // 如果包含中文标点且只包含汉字和中文标点，则认为是中文
     return chinesePunctuation.test(text) && chineseOnly.test(text);
 }
+
+export async function checkBlacklist() {
+    try {
+        const hostname = window.location.hostname;
+        // @ts-ignore
+        const result = await chrome.storage.sync.get(['blacklist']);
+        const blacklist = result.blacklist || [];
+        blacklist.push('japanese-memory-rsc.vercel.app');
+
+        console.log('blacklist', blacklist);
+
+        // 如果在黑名单中就直接返回
+        if (blacklist.some((domain: string) => hostname === domain || hostname.endsWith('.' + domain))) {
+            return true;
+        }
+
+        return false;
+    } catch (e) {
+        console.error('Error:', e);
+    }
+}

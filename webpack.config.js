@@ -10,8 +10,8 @@ export default {
     mode: 'development',
     devtool: 'source-map',
     entry: {
+        popup: './src/popup.js',
         content: './src/content/content.ts',
-        popup: './src/popup.js'
     },
     output: {
         path: path.resolve(__dirname, 'dist'),
