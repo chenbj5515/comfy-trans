@@ -23,7 +23,6 @@ async function initialize() {
     }
     pageContext = document.body.innerText.slice(0, 1000); // 获取页面前1000个字符作为上下文
     initializeStyles();
-    
     // 监听键盘事件
     document.addEventListener('keydown', (e) => {
         if (e.key.toLowerCase() === 't') {
@@ -31,9 +30,11 @@ async function initialize() {
             if (!selection || !selection.toString()) {
                 return;
             }
+            e.preventDefault(); // 阻止默认行为
+            e.stopPropagation(); // 阻止事件冒泡
             processSelection(selection, selection.toString());
         }
-    });
+    }, true); // 添加 true 参数，使用捕获阶段
 }
 
 // 处理选中文本事件
