@@ -186,8 +186,9 @@ export async function askAI(prompt: string, model: string = 'gpt-4-turbo'): Prom
 async function getApiKey(): Promise<string> {
     return new Promise((resolve) => {
         // @ts-ignore
-        chrome.storage.sync.get(['openai_api_key'], (result: { openai_api_key?: string }) => {
-            resolve(result.openai_api_key || '');
+        chrome.storage.sync.get(['apiKey'], (result: { apiKey?: string }) => {
+            console.log('getApiKey result', result);
+            resolve(result.apiKey || '');
         });
     });
 }
