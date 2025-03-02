@@ -1,8 +1,8 @@
 import { askAIStream, askAI } from './api';
 import { InsertPosition } from './types';
 import { initializeStyles } from "./initial";
-import { createTranslatedParagraph, findInsertPosition, getTargetNode, insertTranslatedParagraph, appendLexicalUnit, addUnderlineToSelection } from "./dom";
-import { checkBlacklist, isChineseText } from './utils';
+import { createTranslatedParagraph, findInsertPosition, getTargetNode, insertTranslatedParagraph, appendLexicalUnit, addUnderlineToSelection as domAddUnderlineToSelection } from "./dom";
+import { checkBlacklist, isChineseText, isJapaneseText, addFuriganaToJapanese } from './utils';
 import { speakText } from './audio';
 
 /**
@@ -34,7 +34,6 @@ function calculateWidthFromCharCount(charCount: number): number {
 let pageContext = '';
 
 // 跟踪当前显示的悬浮窗
-let currentVisibleTooltip: HTMLElement | null = null;
 let currentVisiblePopup: HTMLElement | null = null;
 
 // 初始化函数
@@ -70,21 +69,20 @@ async function initialize() {
         // 添加全局点击事件监听器，用于关闭所有悬浮窗
         document.addEventListener('click', (e) => {
             console.log('initialize中的全局点击事件被触发，点击的元素:', e.target);
-            const tooltips = document.querySelectorAll('.comfy-trans-tooltip');
-            console.log('当前页面上的悬浮窗数量:', tooltips.length);
+            const popups = document.querySelectorAll('.comfy-trans-popup');
             
-            tooltips.forEach((tooltip) => {
-                const tooltipElement = tooltip as HTMLElement;
-                console.log('检查悬浮窗:', tooltipElement.id, '当前显示状态:', tooltipElement.style.display);
+            popups.forEach((popup) => {
+                const popupElement = popup as HTMLElement;
+                console.log('检查悬浮窗:', popupElement.id, '当前显示状态:', popupElement.style.display);
                 
-                // 检查点击的元素是否在tooltip内部
-                let isInsideTooltip = false;
+                // 检查点击的元素是否在Popup内部
+                let isInsidePopup = false;
                 let target = e.target as Node;
                 
-                // 检查点击的元素或其祖先元素是否是tooltip
+                // 检查点击的元素或其祖先元素是否是Popup
                 while (target && target !== document.body) {
-                    if (target === tooltipElement) {
-                        isInsideTooltip = true;
+                    if (target === popupElement) {
+                        isInsidePopup = true;
                         break;
                     }
                     if (target.parentNode) {
@@ -94,18 +92,17 @@ async function initialize() {
                     }
                 }
                 
-                // 如果点击的不是tooltip内部元素，则关闭tooltip
-                if (tooltipElement.style.display === 'block' && !isInsideTooltip) {
-                    console.log('initialize中的全局点击事件：点击发生在悬浮窗外部，关闭悬浮窗', tooltipElement.id);
-                    tooltipElement.style.opacity = '0';
-                    tooltipElement.style.display = 'none';
+                if (popupElement.style.display === 'block' && !isInsidePopup) {
+                    console.log('initialize中的全局点击事件：点击发生在悬浮窗外部，关闭悬浮窗', popupElement.id);
+                    popupElement.style.opacity = '0';
+                    popupElement.style.display = 'none';
                     
-                    // 如果关闭的是当前显示的tooltip，重置全局变量
-                    if (currentVisibleTooltip === tooltipElement) {
-                        currentVisibleTooltip = null;
+                    // 重置全局变量
+                    if (currentVisiblePopup === popupElement) {
+                        currentVisiblePopup = null;
                     }
-                } else if (tooltipElement.style.display === 'block') {
-                    console.log('initialize中的全局点击事件：点击发生在悬浮窗内部，不关闭悬浮窗', tooltipElement.id);
+                } else if (popupElement.style.display === 'block') {
+                    console.log('initialize中的全局点击事件：点击发生在悬浮窗内部，不关闭悬浮窗', popupElement.id);
                 }
             });
             
@@ -143,34 +140,6 @@ async function initialize() {
             }
         });
         
-        // 添加测试按钮，方便调试
-        const testButton = document.createElement('button');
-        testButton.textContent = '测试翻译';
-        testButton.style.cssText = `
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            z-index: 10001;
-            padding: 10px;
-            background-color: #3498db;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        `;
-        testButton.addEventListener('click', () => {
-            console.log('点击测试按钮');
-            const selection = window.getSelection();
-            if (selection && selection.toString().trim()) {
-                console.log('处理选中文本:', selection.toString().trim());
-                processSelection(selection);
-            } else {
-                alert('请先选中文本再点击测试按钮');
-            }
-        });
-        document.body.appendChild(testButton);
-        console.log('添加测试按钮');
-        
         console.log('翻译插件初始化完成');
     } catch (error) {
         console.error('初始化插件时出错:', error);
@@ -178,33 +147,11 @@ async function initialize() {
 }
 
 // 创建弹窗
-function createPopup(): HTMLElement {
+function createPopup(popupId: string): HTMLElement {
     console.log('调用createPopup函数');
-    // 检查是否已存在弹窗
-    let popup = document.getElementById('comfy-trans-popup');
-    if (popup) {
-        console.log('找到已存在的弹窗，返回');
-        // 确保弹窗可见
-        popup.style.display = 'block';
-        popup.style.opacity = '1';
-        popup.style.visibility = 'visible';
-        
-        // 隐藏当前显示的tooltip（如果有）
-        if (currentVisibleTooltip && currentVisibleTooltip !== popup) {
-            currentVisibleTooltip.style.display = 'none';
-            currentVisibleTooltip.style.opacity = '0';
-            console.log('隐藏之前显示的tooltip:', currentVisibleTooltip.id);
-        }
-        
-        // 更新当前显示的弹窗
-        currentVisiblePopup = popup as HTMLElement;
-        return popup;
-    }
-
-    console.log('创建新弹窗');
     // 创建弹窗元素
-    popup = document.createElement('div');
-    popup.id = 'comfy-trans-popup';
+    let popup = document.createElement('div');
+    popup.id = popupId;
     popup.className = 'comfy-trans-popup';
     popup.style.cssText = `
         position: absolute;
@@ -253,16 +200,9 @@ function createPopup(): HTMLElement {
 }
 
 // 显示弹窗
-function showPopup(text: string, x: number, y: number): HTMLElement {
+function showPopup(text: string, x: number, y: number, popupId: string): HTMLElement {
     console.log('调用showPopup函数，文本:', text, '位置:', x, y);
-    const popup = createPopup();
-    
-    // 隐藏当前显示的tooltip（如果有）
-    if (currentVisibleTooltip && currentVisibleTooltip !== popup) {
-        currentVisibleTooltip.style.display = 'none';
-        currentVisibleTooltip.style.opacity = '0';
-        console.log('隐藏之前显示的tooltip:', currentVisibleTooltip.id);
-    }
+    const popup = createPopup(popupId);
     
     // 更新当前显示的弹窗
     currentVisiblePopup = popup;
@@ -349,183 +289,6 @@ function showPopup(text: string, x: number, y: number): HTMLElement {
     return popup;
 }
 
-// 创建悬浮提示
-function createTooltip(text: string, translationText: string, explanationText: string = ''): HTMLElement {
-    // 检查是否已存在相同内容的tooltip
-    const existingTooltips = document.querySelectorAll('.comfy-trans-tooltip');
-    for (let i = 0; i < existingTooltips.length; i++) {
-        const tooltip = existingTooltips[i] as HTMLElement;
-        const originalEl = tooltip.querySelector('.comfy-trans-original');
-        if (originalEl && originalEl.textContent === text) {
-            return tooltip;
-        }
-    }
-
-    console.log('创建新的tooltip，文本:', text, '翻译:', translationText, '分析:', explanationText);
-    const tooltip = document.createElement('div');
-    tooltip.className = 'comfy-trans-tooltip';
-    tooltip.id = 'tooltip-' + Math.random().toString(36).substring(2, 15);
-    
-    // 设置初始定位为absolute
-    tooltip.style.position = 'absolute';
-    tooltip.style.zIndex = '10000';
-    
-    // 计算总字符数
-    const totalChars = text.length + translationText.length + (explanationText ? explanationText.length : 0);
-    console.log('总字符数:', totalChars);
-    
-    // 根据字符数计算宽度
-    const width = calculateWidthFromCharCount(totalChars);
-    tooltip.style.maxWidth = `${width}px`;
-    tooltip.style.width = `${width}px`;
-    
-    // 设置主题
-    const isDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    if (isDarkMode) {
-        tooltip.classList.add('dark-theme');
-        tooltip.classList.remove('light-theme');
-    } else {
-        tooltip.classList.add('light-theme');
-        tooltip.classList.remove('dark-theme');
-    }
-    
-    // 创建内容
-    const originalText = document.createElement('div');
-    originalText.className = 'comfy-trans-original';
-    originalText.textContent = text;
-    originalText.style.fontWeight = 'bold';
-    originalText.style.wordBreak = 'break-word';
-    originalText.style.whiteSpace = 'normal';
-    originalText.style.fontSize = '14px';
-    originalText.style.lineHeight = '1.9';
-    originalText.style.cursor = 'pointer';
-    originalText.addEventListener('click', (e) => {
-        e.stopPropagation();
-        speakText(text);
-    });
-    
-    const translationContent = document.createElement('div');
-    translationContent.className = 'comfy-trans-translation';
-    translationContent.textContent = translationText;
-    translationContent.style.borderBottom = isDarkMode ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(0, 0, 0, 0.1)';
-    translationContent.style.paddingBottom = '8px';
-    translationContent.style.marginBottom = '8px';
-    translationContent.style.wordBreak = 'break-word';
-    translationContent.style.whiteSpace = 'normal';
-    translationContent.style.fontSize = '14px';
-    translationContent.style.lineHeight = '1.9';
-    translationContent.addEventListener('click', (e) => e.stopPropagation());
-    
-    // 创建播放按钮
-    const playButton = document.createElement('div');
-    playButton.className = 'comfy-trans-play';
-    playButton.style.display = 'flex';
-    playButton.style.alignItems = 'center';
-    playButton.style.padding = '5px';
-    playButton.style.cursor = 'pointer';
-    playButton.innerHTML = `
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" height="18" width="18" style="cursor: pointer;">
-            <path clip-rule="evenodd" fill-rule="evenodd" d="M11.26 3.691A1.2 1.2 0 0 1 12 4.8v14.4a1.199 1.199 0 0 1-2.048.848L5.503 15.6H2.4a1.2 1.2 0 0 1-1.2-1.2V9.6a1.2 1.2 0 0 1 1.2-1.2h3.103l4.449-4.448a1.2 1.2 0 0 1 1.308-.26Z"></path>
-        </svg>
-    `;
-    
-    // 添加播放事件
-    playButton.addEventListener('click', (e) => {
-        e.stopPropagation(); // 阻止事件冒泡
-        speakText(text);
-    });
-    
-    // 组合元素
-    const header = document.createElement('div');
-    header.style.display = 'flex';
-    header.style.alignItems = 'center';
-    header.appendChild(originalText);
-    header.appendChild(playButton);
-    header.addEventListener('click', (e) => e.stopPropagation());
-    
-    tooltip.appendChild(header);
-    tooltip.appendChild(translationContent);
-    
-    // 添加解释内容（如果有）
-    if (explanationText && explanationText.trim() !== '') {
-        const explanationContent = document.createElement('div');
-        explanationContent.className = 'comfy-trans-explanation';
-        explanationContent.innerHTML = explanationText;
-        explanationContent.style.fontSize = '14px';
-        explanationContent.style.lineHeight = '1.9';
-        explanationContent.style.color = isDarkMode ? '#bbb' : '#555';
-        explanationContent.style.wordBreak = 'break-word';
-        explanationContent.style.whiteSpace = 'normal';
-        explanationContent.addEventListener('click', (e) => e.stopPropagation());
-        tooltip.appendChild(explanationContent);
-        console.log('添加解释内容到tooltip');
-    }
-    
-    // 添加到文档
-    document.body.appendChild(tooltip);
-    
-    // 初始状态为隐藏
-    tooltip.style.display = 'none';
-    tooltip.style.opacity = '0';
-    
-    // 如果当前有弹窗或其他tooltip显示，保持新tooltip隐藏
-    if (currentVisiblePopup || (currentVisibleTooltip && currentVisibleTooltip !== tooltip)) {
-        console.log('当前已有其他悬浮窗显示，保持新tooltip隐藏');
-        tooltip.style.display = 'none';
-        tooltip.style.opacity = '0';
-    }
-    
-    // 添加全局点击事件监听器，点击tooltip外部区域时关闭tooltip
-    const closeTooltipOnOutsideClick = (e: MouseEvent) => {
-        if (tooltip.style.display === 'block') {
-            // 检查点击的元素是否在tooltip内部
-            let isInsideTooltip = false;
-            let target = e.target as Node;
-            
-            // 检查点击的元素或其祖先元素是否是tooltip
-            while (target && target !== document.body) {
-                if (target === tooltip) {
-                    isInsideTooltip = true;
-                    break;
-                }
-                if (target.parentNode) {
-                    target = target.parentNode;
-                } else {
-                    break;
-                }
-            }
-            
-            // 如果点击的不是tooltip内部元素，则关闭tooltip
-            if (!isInsideTooltip) {
-                console.log('createTooltip中的全局点击事件：点击发生在悬浮窗外部，关闭悬浮窗', tooltip.id, '点击的元素:', e.target);
-                tooltip.style.display = 'none';
-                tooltip.style.opacity = '0';
-                
-                // 重置全局变量
-                if (currentVisibleTooltip === tooltip) {
-                    currentVisibleTooltip = null;
-                }
-            } else {
-                console.log('createTooltip中的全局点击事件：点击发生在悬浮窗内部，不关闭悬浮窗', tooltip.id);
-            }
-        }
-    };
-    
-    // 添加点击事件监听
-    document.addEventListener('click', closeTooltipOnOutsideClick);
-    
-    // 确保tooltip不会因为鼠标离开而关闭
-    tooltip.addEventListener('mouseleave', (e) => {
-        // 阻止默认行为和事件冒泡
-        e.preventDefault();
-        e.stopPropagation();
-        // 不做任何关闭操作
-        console.log('鼠标离开悬浮窗，但不关闭悬浮窗');
-    });
-    
-    return tooltip;
-}
-
 // 处理选中文本事件
 async function processSelection(selection: Selection) {
     console.log('进入processSelection函数');
@@ -587,11 +350,6 @@ function isEntireParagraphSelected(targetNode: Element, selectedText: string): b
 // 处理整个段落的翻译
 async function translateFullParagraph(targetNode: Element, selectedText: string, range: Range) {
     const insertAfterNode = findInsertPosition(targetNode);
-    const translatedParagraph = createTranslatedParagraph(targetNode);
-
-    // 根据模式设置样式类
-    const isDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    translatedParagraph.className = isDarkMode ? 'translation-paragraph dark-theme' : 'translation-paragraph light-theme';
 
     if (insertAfterNode && insertAfterNode.parentNode) {
         const insertPosition: InsertPosition = {
@@ -602,37 +360,69 @@ async function translateFullParagraph(targetNode: Element, selectedText: string,
             nextSibling: insertAfterNode.nextSibling
         };
 
-        insertTranslatedParagraph(translatedParagraph, insertPosition);
+        // 获取原始节点的完整HTML
+        const originalHTML = targetNode.outerHTML;
+        console.log('原始HTML:', originalHTML);
         
-        // 创建翻译内容的div容器
-        const translationDiv = document.createElement('div');
-        translationDiv.id = 'translation-content-' + Math.random().toString(36).substring(2, 15);
-        translatedParagraph.appendChild(translationDiv);
-
-        const stream = await askAIStream(`请将「${selectedText}」翻译成中文。这个文本出现的上下文是: ${pageContext}，考虑这个上下文进行翻译，只输出翻译结果就好，不要输出任何其他内容`);
-
-        let translationText = '';
-        let chunkCount = 0;
-
-        for await (const chunk of stream) {
-            if (translationDiv && chunk) {
-                translationDiv.innerHTML += chunk;
-                translationText += chunk;
-                
-                // 每接收10个数据块或累积一定字符数后，重新计算宽度
-                chunkCount++;
-                if (chunkCount % 10 === 0 || translationText.length % 50 === 0) {
-                    // 计算总字符数
-                    const totalChars = selectedText.length + translationText.length;
-                    
-                    // 计算宽度
-                    const width = calculateWidthFromCharCount(totalChars);
-                    
-                    // 应用新宽度到翻译段落
-                    translatedParagraph.style.width = `${width}px`;
-                    translatedParagraph.style.maxWidth = `${width}px`;
+        // 创建一个临时容器来放置翻译后的内容
+        const tempContainer = document.createElement('div');
+        tempContainer.className = 'comfy-trans-temp-container';
+        tempContainer.innerHTML = '<div class="comfy-trans-loading">正在翻译...</div>';
+        
+        // 插入临时容器
+        insertTranslatedParagraph(tempContainer, insertPosition);
+        
+        try {
+            // 向AI发送完整的HTML标签，请求翻译
+            const stream = await askAIStream(`
+            我会给你一个HTML标签及其内容，请将其中的文本内容翻译成中文，但保持HTML结构和属性不变。
+            这个文本出现的上下文是: ${pageContext}
+            
+            原始HTML:
+            ${originalHTML}
+            
+            请返回完整的HTML标签，只将文本内容替换为中文翻译。不要添加任何解释或前缀，直接返回翻译后的HTML。
+            `);
+            
+            let translatedHTML = '';
+            
+            for await (const chunk of stream) {
+                if (chunk) {
+                    translatedHTML += chunk;
                 }
             }
+            
+            console.log('获取到翻译后的HTML:', translatedHTML);
+            
+            // 清理可能的前缀和后缀文本
+            translatedHTML = translatedHTML.trim();
+            
+            // 如果AI返回了带有代码块的回答，提取代码块内容
+            if (translatedHTML.includes('```html')) {
+                translatedHTML = translatedHTML.split('```html')[1].split('```')[0].trim();
+            } else if (translatedHTML.includes('```')) {
+                translatedHTML = translatedHTML.split('```')[1].split('```')[0].trim();
+            }
+            
+            // 创建翻译后的元素
+            const translatedElement = document.createElement('div');
+            translatedElement.innerHTML = translatedHTML;
+            
+            // 获取翻译后的节点
+            const translatedNode = translatedElement.firstChild as HTMLElement;
+            
+            if (translatedNode) {
+                // 直接使用AI返回的结果，不添加额外的类名和样式
+                // 替换临时容器
+                tempContainer.replaceWith(translatedNode);
+                console.log('翻译完成，已插入翻译后的HTML');
+            } else {
+                console.error('无法解析翻译后的HTML');
+                tempContainer.innerHTML = '翻译失败，无法解析翻译后的HTML';
+            }
+        } catch (error) {
+            console.error('翻译过程中出错:', error);
+            tempContainer.innerHTML = '翻译失败，请查看控制台获取详细错误信息';
         }
     } else {
         console.error('无法找到有效的插入位置');
@@ -644,14 +434,13 @@ async function translatePartialText(selectedText: string, x: number, y: number, 
     console.log('开始翻译部分文本:', selectedText, '位置:', x, y);
     
     try {
+        const popupId = `comfy-trans-popup-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
         // 为选中文本添加下划线并创建带有悬浮提示的span
-        console.log('添加下划线和悬浮提示');
-        const underlinedSpan = addUnderlineWithTooltip(range, selectedText);
-        console.log('下划线和悬浮提示添加完成');
+        addUnderlineWithPopup(range, selectedText, popupId);
         
         // 显示弹窗
-        console.log('准备显示弹窗');
-        const popup = showPopup(selectedText, x, y);
+        const popup = showPopup(selectedText, x, y, popupId);
         console.log('弹窗显示完成，获取内容容器');
         const content = popup.querySelector('.comfy-trans-content') as HTMLElement;
         
@@ -659,8 +448,7 @@ async function translatePartialText(selectedText: string, x: number, y: number, 
         currentVisiblePopup = popup;
         
         // 获取翻译和解释
-        console.log('开始获取翻译');
-        const translationPromise = askAI(`请将「${selectedText}」翻译成中文。这个文本出现的上下文是: ${pageContext}，考虑这个上下文进行翻译，只输出翻译结果就好，不要输出任何其他内容`);
+        const translationPromise = askAI(`请将「${selectedText}」翻译成中文。只输出翻译结果就好，不要输出任何其他内容`);
         
         // 创建翻译和解释的容器
         console.log('创建翻译和解释的容器');
@@ -728,9 +516,37 @@ async function translatePartialText(selectedText: string, x: number, y: number, 
         // 显示翻译结果
         console.log('等待翻译结果');
         translationDiv.textContent = '正在翻译...';
-        const translation = await translationPromise;
+        let translation = await translationPromise;
         console.log('获取到翻译结果:', translation);
-        translationDiv.textContent = translation;
+        
+        // 检查翻译结果是否为日语文本，如果是，则添加平假名
+        console.log('检查翻译结果是否为日语文本1:', selectedText);
+        console.log('检查翻译结果是否为日语文本2:', isJapaneseText(selectedText));
+        if (isJapaneseText(selectedText)) {
+            console.log('检测到日语文本，添加平假名');
+            // 不修改translationDiv，而是修改原文标题元素
+            const textWithFurigana = await addFuriganaToJapanese(selectedText);
+            
+            // 使用innerHTML设置带有ruby标签的内容
+            originalText.innerHTML = textWithFurigana;
+            
+            // 更新点击事件，确保播放的是原始文本
+            originalText.addEventListener('click', () => {
+                console.log('点击播放按钮', selectedText);
+                speakText(selectedText);
+            });
+            
+            playButton.addEventListener('click', (e) => {
+                e.stopPropagation();
+                console.log('点击播放按钮', selectedText);
+                speakText(selectedText);
+            });
+            
+            // 翻译div仍然显示普通的中文翻译
+            translationDiv.textContent = translation;
+        } else {
+            translationDiv.textContent = translation;
+        }
         
         // 流式显示解释
         console.log('开始获取解释');
@@ -759,46 +575,22 @@ async function translatePartialText(selectedText: string, x: number, y: number, 
                     // 应用新宽度
                     popup.style.width = `${width}px`;
                     popup.style.maxWidth = `${width}px`;
-                    
-                    // 重新计算位置，确保弹窗不超出视窗
-                    const popupRect = popup.getBoundingClientRect();
-                    // ... 位置调整逻辑 ...
                 }
             }
         }
         console.log('解释获取完成');
         
-        // 创建tooltip并存储翻译结果和解释
-        console.log('创建tooltip并存储翻译结果和解释');
-        const tooltip = createTooltip(selectedText, translation, explanation);
-        underlinedSpan.dataset.tooltip = tooltip.id;
-        console.log('tooltip创建完成，ID:', tooltip.id);
+        // 创建Popup并存储翻译结果和解释
+        console.log('创建Popup并存储翻译结果和解释');
         
-        // 隐藏tooltip，因为当前已经显示了弹窗
-        tooltip.style.display = 'none';
-        tooltip.style.opacity = '0';
-        
-        // 将tooltip添加到全局变量中，但不显示它
-        currentVisibleTooltip = null; // 确保不会被错误地设置为当前显示的tooltip
-        
-        // 根据字符数调整弹窗宽度
-        const totalChars = selectedText.length + translation.length + explanation.length;
-        console.log('总字符数:', totalChars);
-        
-        // 根据字符数计算宽度
-        const width = calculateWidthFromCharCount(totalChars);
-        popup.style.width = `${width}px`;
-        popup.style.maxWidth = `${width}px`;
-        
-        console.log('弹窗将保持显示，直到用户点击关闭按钮或点击弹窗外部区域');
     } catch (error) {
         console.error('翻译过程中出错:', error);
         alert('翻译失败，请查看控制台获取详细错误信息');
     }
 }
 
-// 为选中文本添加下划线并创建带有悬浮提示的span
-function addUnderlineWithTooltip(range: Range, selectedText: string): HTMLSpanElement {
+// 为选中文本添加下划线
+function addUnderlineWithPopup(range: Range, selectedText: string, popupId: string): HTMLSpanElement {
     const textNode = range.startContainer as Text;
     const startOffset = range.startOffset;
     const endOffset = range.endOffset;
@@ -817,198 +609,14 @@ function addUnderlineWithTooltip(range: Range, selectedText: string): HTMLSpanEl
     span.style.position = 'relative';
     span.style.backgroundColor = 'rgba(52, 152, 219, 0.1)';
     
-    // 添加鼠标悬停事件
-    span.addEventListener('mouseenter', (e) => {
-        console.log('鼠标进入下划线文本，事件对象:', e.type, '目标元素:', e.target);
-        const tooltipId = span.dataset.tooltip;
-        console.log('获取到tooltip ID:', tooltipId);
-        
-        if (tooltipId) {
-            const tooltip = document.getElementById(tooltipId);
-            console.log('找到tooltip元素:', tooltip);
-            
-            if (tooltip) {
-                // 如果当前有其他悬浮窗显示，先隐藏它
-                if (currentVisiblePopup && currentVisiblePopup.id !== tooltip.id) {
-                    currentVisiblePopup.style.display = 'none';
-                    currentVisiblePopup.style.opacity = '0';
-                    console.log('隐藏当前显示的弹窗:', currentVisiblePopup.id);
-                }
-                
-                // 如果当前有其他tooltip显示，先隐藏它
-                if (currentVisibleTooltip && currentVisibleTooltip.id !== tooltip.id) {
-                    currentVisibleTooltip.style.display = 'none';
-                    currentVisibleTooltip.style.opacity = '0';
-                    console.log('隐藏当前显示的tooltip:', currentVisibleTooltip.id);
-                }
-                
-                // 更新当前显示的tooltip
-                currentVisibleTooltip = tooltip as HTMLElement;
-                
-                // 先设置为可见，以便计算尺寸
-                tooltip.style.display = 'block';
-                tooltip.style.opacity = '1';
-                tooltip.style.visibility = 'visible';
-                console.log('设置tooltip为可见，当前状态:', tooltip.style.display, tooltip.style.opacity, tooltip.style.visibility);
-                
-                // 使用setTimeout确保DOM已更新
-                setTimeout(() => {
-                    console.log('setTimeout回调执行，重新计算tooltip位置');
-                    // 计算位置
-                    const rect = span.getBoundingClientRect();
-                    const tooltipRect = tooltip.getBoundingClientRect();
-                    console.log('span位置:', rect);
-                    console.log('tooltip尺寸:', tooltipRect);
-                    
-                    // 检查宽高比
-                    const widthHeightRatio = tooltipRect.width / tooltipRect.height;
-                    const targetRatio = 368 / 500; // 目标宽高比
-                    console.log('当前宽高比:', widthHeightRatio, '目标宽高比:', targetRatio);
-                    
-                    // 如果宽高比偏离目标太多，调整宽度
-                    if (Math.abs(widthHeightRatio - targetRatio) > 0.1) {
-                        // 根据当前高度计算理想宽度
-                        const idealWidth = Math.round(tooltipRect.height * targetRatio);
-                        console.log('调整宽度以接近目标宽高比，理想宽度:', idealWidth);
-                        
-                        // 限制宽度在合理范围内
-                        const finalWidth = Math.max(250, Math.min(400, idealWidth));
-                        tooltip.style.width = `${finalWidth}px`;
-                        tooltip.style.maxWidth = `${finalWidth}px`;
-                        console.log('最终设置的宽度:', finalWidth);
-                    }
-                    
-                    // 将悬浮窗定位在单词的右下角
-                    let posX = rect.right;
-                    let posY = rect.bottom;
-                    console.log('初始计算位置(右下角):', posX, posY);
-                    
-                    // 检查是否会超出视窗右侧
-                    if (posX + tooltipRect.width > window.innerWidth + window.scrollX) {
-                        // 如果超出右侧，则显示在左侧
-                        posX = rect.left - tooltipRect.width;
-                        console.log('调整水平位置，避免超出右侧:', posX);
-                    }
-                    
-                    // 检查是否会超出视窗底部
-                    if (posY + tooltipRect.height > window.innerHeight + window.scrollY) {
-                        // 如果超出底部，则显示在上方
-                        posY = rect.top - tooltipRect.height;
-                        console.log('调整垂直位置，避免超出底部:', posY);
-                    }
-                    
-                    // 设置最终位置，使用absolute定位而不是fixed
-                    tooltip.style.position = 'absolute';
-                    tooltip.style.left = `${posX + window.scrollX}px`;
-                    tooltip.style.top = `${posY + window.scrollY}px`;
-                    console.log('设置tooltip最终位置:', posX + window.scrollX, posY + window.scrollY, '当前状态:', tooltip.style.display, tooltip.style.opacity);
-                }, 0);
-            } else {
-                console.error('未找到tooltip元素，ID:', tooltipId);
-            }
-        } else {
-            console.log('span没有关联的tooltip ID');
-        }
-    });
+    // 设置popup id到dataset
+    span.dataset.popup = popupId;
     
-    // 添加点击事件，防止点击下划线文本时关闭tooltip
-    span.addEventListener('click', (e) => {
-        console.log('下划线文本被点击，事件对象:', e.type, '目标元素:', e.target);
-        e.stopPropagation();
-        
-        // 点击下划线文本时发音
-        speakText(selectedText);
-        
-        // 显示对应的tooltip
-        const tooltipId = span.dataset.tooltip;
-        console.log('获取到tooltip ID:', tooltipId);
-        
-        if (tooltipId) {
-            const tooltip = document.getElementById(tooltipId);
-            console.log('找到tooltip元素:', tooltip);
-            
-            if (tooltip) {
-                // 如果当前有其他悬浮窗显示，先隐藏它
-                if (currentVisiblePopup && currentVisiblePopup.id !== tooltip.id) {
-                    currentVisiblePopup.style.display = 'none';
-                    currentVisiblePopup.style.opacity = '0';
-                    console.log('隐藏当前显示的弹窗:', currentVisiblePopup.id);
-                }
-                
-                // 如果当前有其他tooltip显示，先隐藏它
-                if (currentVisibleTooltip && currentVisibleTooltip.id !== tooltip.id) {
-                    currentVisibleTooltip.style.display = 'none';
-                    currentVisibleTooltip.style.opacity = '0';
-                    console.log('隐藏当前显示的tooltip:', currentVisibleTooltip.id);
-                }
-                
-                // 更新当前显示的tooltip
-                currentVisibleTooltip = tooltip as HTMLElement;
-                
-                tooltip.style.display = 'block';
-                tooltip.style.opacity = '1';
-                tooltip.style.visibility = 'visible';
-                console.log('设置tooltip为可见，当前状态:', tooltip.style.display, tooltip.style.opacity, tooltip.style.visibility);
-                
-                // 使用setTimeout确保DOM已更新
-                setTimeout(() => {
-                    console.log('setTimeout回调执行，重新计算tooltip位置');
-                    // 计算位置
-                    const rect = span.getBoundingClientRect();
-                    const tooltipRect = tooltip.getBoundingClientRect();
-                    console.log('span位置:', rect);
-                    console.log('tooltip尺寸:', tooltipRect);
-                    
-                    // 检查宽高比
-                    const widthHeightRatio = tooltipRect.width / tooltipRect.height;
-                    const targetRatio = 368 / 500; // 目标宽高比
-                    console.log('当前宽高比:', widthHeightRatio, '目标宽高比:', targetRatio);
-                    
-                    // 如果宽高比偏离目标太多，调整宽度
-                    if (Math.abs(widthHeightRatio - targetRatio) > 0.1) {
-                        // 根据当前高度计算理想宽度
-                        const idealWidth = Math.round(tooltipRect.height * targetRatio);
-                        console.log('调整宽度以接近目标宽高比，理想宽度:', idealWidth);
-                        
-                        // 限制宽度在合理范围内
-                        const finalWidth = Math.max(250, Math.min(400, idealWidth));
-                        tooltip.style.width = `${finalWidth}px`;
-                        tooltip.style.maxWidth = `${finalWidth}px`;
-                        console.log('最终设置的宽度:', finalWidth);
-                    }
-                    
-                    // 将悬浮窗定位在单词的右下角
-                    let posX = rect.right;
-                    let posY = rect.bottom;
-                    console.log('初始计算位置(右下角):', posX, posY);
-                    
-                    // 检查是否会超出视窗右侧
-                    if (posX + tooltipRect.width > window.innerWidth + window.scrollX) {
-                        // 如果超出右侧，则显示在左侧
-                        posX = rect.left - tooltipRect.width;
-                        console.log('调整水平位置，避免超出右侧:', posX);
-                    }
-                    
-                    // 检查是否会超出视窗底部
-                    if (posY + tooltipRect.height > window.innerHeight + window.scrollY) {
-                        // 如果超出底部，则显示在上方
-                        posY = rect.top - tooltipRect.height;
-                        console.log('调整垂直位置，避免超出底部:', posY);
-                    }
-                    
-                    // 设置最终位置，使用absolute定位而不是fixed
-                    tooltip.style.position = 'absolute';
-                    tooltip.style.left = `${posX + window.scrollX}px`;
-                    tooltip.style.top = `${posY + window.scrollY}px`;
-                    console.log('设置tooltip最终位置:', posX + window.scrollX, posY + window.scrollY, '当前状态:', tooltip.style.display, tooltip.style.opacity);
-                }, 0);
-            } else {
-                console.error('未找到tooltip元素，ID:', tooltipId);
-            }
-        } else {
-            console.log('span没有关联的tooltip ID');
-        }
-    });
+    // 添加鼠标悬停事件
+    span.addEventListener('mouseenter', handlePopupDisplay);
+    
+    // 添加点击事件，防止点击下划线文本时关闭Popup
+    span.addEventListener('click', handlePopupDisplay);
     
     // 替换原始文本节点
     const fragment = document.createDocumentFragment();
@@ -1021,6 +629,91 @@ function addUnderlineWithTooltip(range: Range, selectedText: string): HTMLSpanEl
     }
     
     return span;
+}
+
+// 处理Popup显示的统一函数
+function handlePopupDisplay(e: MouseEvent) {
+    console.log('处理Popup显示，事件类型:', e.type, '目标元素:', e.target);
+    e.stopPropagation();
+    
+    const span = e.currentTarget as HTMLElement;
+    const popupId = span.dataset.popup;
+    
+    // 如果是点击事件，播放文本
+    if (e.type === 'click') {
+        const text = span.textContent || '';
+        speakText(text);
+    }
+    
+    console.log('获取到Popup ID:', popupId);
+    
+    if (popupId) {
+        const popup = document.getElementById(popupId);
+        console.log('找到Popup元素:', popup);
+        
+        if (popup) {
+            console.log('currentVisiblePopup:', currentVisiblePopup);
+            if (currentVisiblePopup) {
+                return;
+            }
+            
+            // 更新当前显示的Popup
+            currentVisiblePopup = popup as HTMLElement;
+            
+            // 先设置为可见，以便计算尺寸
+            popup.style.display = 'block';
+            popup.style.opacity = '1';
+            popup.style.visibility = 'visible';
+            console.log('设置Popup为可见，当前状态:', popup.style.display, popup.style.opacity, popup.style.visibility);
+            
+            // 使用setTimeout确保DOM已更新
+            setTimeout(() => {
+                console.log('setTimeout回调执行，设置Popup位置');
+                // 计算位置
+                const rect = span.getBoundingClientRect();
+                const popupRect = popup.getBoundingClientRect();
+                console.log('span位置:', rect);
+                console.log('Popup尺寸:', popupRect);
+                
+                // 使用存储的最终宽度，如果有的话
+                if (popup.dataset.finalWidth) {
+                    const finalWidth = parseInt(popup.dataset.finalWidth);
+                    console.log('使用存储的最终宽度:', finalWidth);
+                    popup.style.width = `${finalWidth}px`;
+                    popup.style.maxWidth = `${finalWidth}px`;
+                }
+                
+                // 将悬浮窗定位在单词的右下角
+                let posX = rect.right;
+                let posY = rect.bottom;
+                console.log('初始计算位置(右下角):', posX, posY);
+                
+                // 检查是否会超出视窗右侧
+                if (posX + popupRect.width > window.innerWidth + window.scrollX) {
+                    // 如果超出右侧，则显示在左侧
+                    posX = rect.left - popupRect.width;
+                    console.log('调整水平位置，避免超出右侧:', posX);
+                }
+                
+                // 检查是否会超出视窗底部
+                if (posY + popupRect.height > window.innerHeight + window.scrollY) {
+                    // 如果超出底部，则显示在上方
+                    posY = rect.top - popupRect.height;
+                    console.log('调整垂直位置，避免超出底部:', posY);
+                }
+                
+                // 设置最终位置，使用absolute定位而不是fixed
+                popup.style.position = 'absolute';
+                popup.style.left = `${posX + window.scrollX}px`;
+                popup.style.top = `${posY + window.scrollY}px`;
+                console.log('设置Popup最终位置:', posX + window.scrollX, posY + window.scrollY, '当前状态:', popup.style.display, popup.style.opacity);
+            }, 0);
+        } else {
+            console.error('未找到Popup元素，ID:', popupId);
+        }
+    } else {
+        console.log('span没有关联的Popup ID');
+    }
 }
 
 // 初始化并添加事件监听
