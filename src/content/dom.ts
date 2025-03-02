@@ -104,7 +104,7 @@ export function appendLexicalUnit(translationParagraph: HTMLParagraphElement, se
 }
 
 // 为选中文本添加下划线
-export function addUnderlineToSelection(range: Range) {
+export function addUnderlineToSelection(range: Range): HTMLSpanElement {
     const textNode = range.startContainer as Text;
     const startOffset = range.startOffset;
     const endOffset = range.endOffset;
@@ -114,7 +114,11 @@ export function addUnderlineToSelection(range: Range) {
     const afterText = textNode.textContent?.substring(endOffset) || '';
 
     const span = document.createElement('span');
+    span.className = 'comfy-trans-underlined';
     span.style.textDecoration = 'underline';
+    span.style.textDecorationStyle = 'dotted';
+    span.style.textDecorationColor = '#3498db';
+    span.style.cursor = 'pointer';
     span.textContent = selectedContent;
 
     const fragment = document.createDocumentFragment();
@@ -125,4 +129,6 @@ export function addUnderlineToSelection(range: Range) {
     if (textNode.parentNode) {
         textNode.parentNode.replaceChild(fragment, textNode);
     }
+    
+    return span;
 }
