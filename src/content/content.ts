@@ -1,8 +1,8 @@
 import { askAIStream, askAI } from './api';
 import { InsertPosition } from './types';
 import { initializeStyles } from "./initial";
-import { createTranslatedParagraph, findInsertPosition, getTargetNode, insertTranslatedParagraph, appendLexicalUnit, addUnderlineToSelection as domAddUnderlineToSelection } from "./dom";
-import { checkBlacklist, isChineseText, isJapaneseText, addFuriganaToJapanese } from './utils';
+import { findInsertPosition, getTargetNode, insertTranslatedParagraph } from "./dom";
+import { isChineseText, isJapaneseText, addFuriganaToJapanese } from './utils';
 import { speakText } from './audio';
 
 /**
@@ -30,23 +30,13 @@ function calculateWidthFromCharCount(charCount: number): number {
     return width;
 }
 
-// 存储页面上下文
-let pageContext = '';
-
 // 跟踪当前显示的悬浮窗
 let currentVisiblePopup: HTMLElement | null = null;
 
 // 初始化函数
 async function initialize() {
     try {
-        const isBlacklist = await checkBlacklist();
-        console.log('isBlacklist', isBlacklist);
-        if (isBlacklist) {
-            return;
-        }
         
-        console.log('初始化翻译插件...');
-        pageContext = document.body.innerText.slice(0, 500); // 获取页面前1000个字符作为上下文
         initializeStyles();
         
         // 监听键盘事件
@@ -65,80 +55,6 @@ async function initialize() {
                 processSelection(selection);
             }
         }, true); // 添加 true 参数，使用捕获阶段
-        
-        // 添加全局点击事件监听器，用于关闭所有悬浮窗
-        document.addEventListener('click', (e) => {
-            console.log('initialize中的全局点击事件被触发，点击的元素:', e.target);
-            const popups = document.querySelectorAll('.comfy-trans-popup');
-            
-            popups.forEach((popup) => {
-                const popupElement = popup as HTMLElement;
-                console.log('检查悬浮窗:', popupElement.id, '当前显示状态:', popupElement.style.display);
-                
-                // 检查点击的元素是否在Popup内部
-                let isInsidePopup = false;
-                let target = e.target as Node;
-                
-                // 检查点击的元素或其祖先元素是否是Popup
-                while (target && target !== document.body) {
-                    if (target === popupElement) {
-                        isInsidePopup = true;
-                        break;
-                    }
-                    if (target.parentNode) {
-                        target = target.parentNode;
-                    } else {
-                        break;
-                    }
-                }
-                
-                if (popupElement.style.display === 'block' && !isInsidePopup) {
-                    console.log('initialize中的全局点击事件：点击发生在悬浮窗外部，关闭悬浮窗', popupElement.id);
-                    popupElement.style.opacity = '0';
-                    popupElement.style.display = 'none';
-                    
-                    // 重置全局变量
-                    if (currentVisiblePopup === popupElement) {
-                        currentVisiblePopup = null;
-                    }
-                } else if (popupElement.style.display === 'block') {
-                    console.log('initialize中的全局点击事件：点击发生在悬浮窗内部，不关闭悬浮窗', popupElement.id);
-                }
-            });
-            
-            // 检查弹窗
-            const popup = document.getElementById('comfy-trans-popup');
-            if (popup) {
-                // 检查点击的元素是否在popup内部
-                let isInsidePopup = false;
-                let target = e.target as Node;
-                
-                // 检查点击的元素或其祖先元素是否是popup
-                while (target && target !== document.body) {
-                    if (target === popup) {
-                        isInsidePopup = true;
-                        break;
-                    }
-                    if (target.parentNode) {
-                        target = target.parentNode;
-                    } else {
-                        break;
-                    }
-                }
-                
-                // 如果点击的不是popup内部元素，则关闭popup
-                if (popup.style.display === 'block' && !isInsidePopup) {
-                    console.log('initialize中的全局点击事件：点击发生在弹窗外部，关闭弹窗');
-                    popup.style.opacity = '0';
-                    popup.style.display = 'none';
-                    
-                    // 重置全局变量
-                    if (currentVisiblePopup === popup) {
-                        currentVisiblePopup = null;
-                    }
-                }
-            }
-        });
         
         console.log('翻译插件初始化完成');
     } catch (error) {
@@ -326,13 +242,10 @@ async function processSelection(selection: Selection) {
     // 判断是否选中了整个段落
     const isFullParagraph = isEntireParagraphSelected(targetNode, selectedText);
 
-    console.log('处理选中文本:', selectedText, '是否为整段:', isFullParagraph, '位置:', x, y);
-    console.log('选中文本的矩形区域:', rect);
-
     if (isFullParagraph) {
         console.log('处理整段翻译');
         // 处理整个段落的翻译
-        await translateFullParagraph(targetNode, selectedText, range);
+        await translateFullParagraph(targetNode);
     } else {
         console.log('处理部分文本翻译');
         // 处理部分文本的翻译
@@ -348,84 +261,134 @@ function isEntireParagraphSelected(targetNode: Element, selectedText: string): b
 }
 
 // 处理整个段落的翻译
-async function translateFullParagraph(targetNode: Element, selectedText: string, range: Range) {
-    const insertAfterNode = findInsertPosition(targetNode);
-
-    if (insertAfterNode && insertAfterNode.parentNode) {
-        const insertPosition: InsertPosition = {
-            parentNode: {
-                insertBefore: (node: Node, reference: Node | null) =>
-                    insertAfterNode.parentNode!.insertBefore(node, reference)
-            },
-            nextSibling: insertAfterNode.nextSibling
-        };
-
-        // 获取原始节点的完整HTML
-        const originalHTML = targetNode.outerHTML;
-        console.log('原始HTML:', originalHTML);
-        
-        // 创建一个临时容器来放置翻译后的内容
-        const tempContainer = document.createElement('div');
-        tempContainer.className = 'comfy-trans-temp-container';
-        tempContainer.innerHTML = '<div class="comfy-trans-loading">正在翻译...</div>';
-        
-        // 插入临时容器
-        insertTranslatedParagraph(tempContainer, insertPosition);
-        
-        try {
-            // 向AI发送完整的HTML标签，请求翻译
-            const stream = await askAIStream(`
-            我会给你一个HTML标签及其内容，请将其中的文本内容翻译成中文，但保持HTML结构和属性不变。
-            这个文本出现的上下文是: ${pageContext}
-            
-            原始HTML:
-            ${originalHTML}
-            
-            请返回完整的HTML标签，只将文本内容替换为中文翻译。不要添加任何解释或前缀，直接返回翻译后的HTML。
-            `);
-            
-            let translatedHTML = '';
-            
-            for await (const chunk of stream) {
-                if (chunk) {
-                    translatedHTML += chunk;
-                }
-            }
-            
-            console.log('获取到翻译后的HTML:', translatedHTML);
-            
-            // 清理可能的前缀和后缀文本
-            translatedHTML = translatedHTML.trim();
-            
-            // 如果AI返回了带有代码块的回答，提取代码块内容
-            if (translatedHTML.includes('```html')) {
-                translatedHTML = translatedHTML.split('```html')[1].split('```')[0].trim();
-            } else if (translatedHTML.includes('```')) {
-                translatedHTML = translatedHTML.split('```')[1].split('```')[0].trim();
-            }
-            
-            // 创建翻译后的元素
-            const translatedElement = document.createElement('div');
-            translatedElement.innerHTML = translatedHTML;
-            
-            // 获取翻译后的节点
-            const translatedNode = translatedElement.firstChild as HTMLElement;
-            
-            if (translatedNode) {
-                // 直接使用AI返回的结果，不添加额外的类名和样式
-                // 替换临时容器
-                tempContainer.replaceWith(translatedNode);
-                console.log('翻译完成，已插入翻译后的HTML');
-            } else {
-                console.error('无法解析翻译后的HTML');
-                tempContainer.innerHTML = '翻译失败，无法解析翻译后的HTML';
-            }
-        } catch (error) {
-            console.error('翻译过程中出错:', error);
-            tempContainer.innerHTML = '翻译失败，请查看控制台获取详细错误信息';
-        }
-    } else {
+async function translateFullParagraph(targetNode: Element) {
+    // 1. 找到插入位置
+    const insertPosition = findParagraphInsertPosition(targetNode);
+    if (!insertPosition) {
         console.error('无法找到有效的插入位置');
+        return;
+    }
+
+    // 2. 创建临时容器
+    const originalHTML = targetNode.outerHTML;
+    const tempContainer = createTempContainer();
+    
+    // 3. 插入临时容器
+    insertTempContainer(tempContainer, insertPosition);
+    
+    try {
+        // 4. 发送原始HTML到AI并处理结果
+        const translatedHTML = await getTranslatedHTML(originalHTML);
+        
+        // 5. 创建并插入翻译后的节点
+        replaceWithTranslatedNode(translatedHTML, tempContainer);
+    } catch (error) {
+        console.error('翻译过程中出错:', error);
+        tempContainer.innerHTML = '翻译失败，请查看控制台获取详细错误信息';
+    }
+}
+
+/**
+ * 1. 找到段落的插入位置
+ * @param targetNode 目标节点
+ * @returns 插入位置对象，如果找不到则返回null
+ */
+function findParagraphInsertPosition(targetNode: Element): InsertPosition | null {
+    const insertAfterNode = findInsertPosition(targetNode);
+    
+    if (!insertAfterNode || !insertAfterNode.parentNode) {
+        return null;
+    }
+    
+    return {
+        parentNode: {
+            insertBefore: (node: Node, reference: Node | null) =>
+                insertAfterNode.parentNode!.insertBefore(node, reference)
+        },
+        nextSibling: insertAfterNode.nextSibling
+    };
+}
+
+/**
+ * 2. 创建临时容器
+ * @returns 创建的临时容器元素
+ */
+function createTempContainer(): HTMLDivElement {
+    const tempContainer = document.createElement('div');
+    tempContainer.className = 'comfy-trans-temp-container';
+    tempContainer.innerHTML = '<div class="comfy-trans-loading">正在翻译...</div>';
+    return tempContainer;
+}
+
+/**
+ * 3. 插入临时容器到DOM
+ * @param tempContainer 临时容器元素
+ * @param insertPosition 插入位置
+ */
+function insertTempContainer(tempContainer: HTMLDivElement, insertPosition: InsertPosition): void {
+    insertTranslatedParagraph(tempContainer, insertPosition);
+}
+
+/**
+ * 4. 获取翻译后的HTML
+ * @param originalHTML 原始HTML
+ * @returns 翻译后的HTML
+ */
+async function getTranslatedHTML(originalHTML: string): Promise<string> {
+    // 向AI发送完整的HTML标签，请求翻译
+    const stream = await askAIStream(`
+    我会给你一个HTML标签及其内容，请将其中的文本内容翻译成中文，但保持HTML结构和属性不变。
+    
+    原始HTML:
+    ${originalHTML}
+    
+    请返回完整的HTML标签，只将文本内容替换为中文翻译。不要添加任何解释或前缀，直接返回翻译后的HTML。
+    `);
+    
+    let translatedHTML = '';
+    
+    for await (const chunk of stream) {
+        if (chunk) {
+            translatedHTML += chunk;
+        }
+    }
+    
+    console.log('获取到翻译后的HTML:', translatedHTML);
+    
+    // 清理可能的前缀和后缀文本
+    translatedHTML = translatedHTML.trim();
+    
+    // 如果AI返回了带有代码块的回答，提取代码块内容
+    if (translatedHTML.includes('```html')) {
+        translatedHTML = translatedHTML.split('```html')[1].split('```')[0].trim();
+    } else if (translatedHTML.includes('```')) {
+        translatedHTML = translatedHTML.split('```')[1].split('```')[0].trim();
+    }
+    
+    return translatedHTML;
+}
+
+/**
+ * 5. 创建并插入翻译后的节点
+ * @param translatedHTML 翻译后的HTML
+ * @param tempContainer 临时容器，将被替换
+ */
+function replaceWithTranslatedNode(translatedHTML: string, tempContainer: HTMLDivElement): void {
+    // 创建翻译后的元素
+    const translatedElement = document.createElement('div');
+    translatedElement.innerHTML = translatedHTML;
+    
+    // 获取翻译后的节点
+    const translatedNode = translatedElement.firstChild as HTMLElement;
+    
+    if (translatedNode) {
+        // 直接使用AI返回的结果，不添加额外的类名和样式
+        // 替换临时容器
+        tempContainer.replaceWith(translatedNode);
+        console.log('翻译完成，已插入翻译后的HTML');
+    } else {
+        console.error('无法解析翻译后的HTML');
+        tempContainer.innerHTML = '翻译失败，无法解析翻译后的HTML';
     }
 }
 
