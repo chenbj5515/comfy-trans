@@ -1,5 +1,6 @@
 import { InsertPosition } from "./types";
 import { speakText } from "./audio";
+import { calculateWidthFromCharCount } from './helpers';
 
 // 获取目标节点
 export function getTargetNode(range: Range): Element | null {
@@ -476,6 +477,3 @@ export function showPopup(text: string, x: number, y: number, popupId: string): 
     
     return popup;
 }
-
-// 从utils.ts导入calculateWidthFromCharCount函数
-import { calculateWidthFromCharCount } from './utils';

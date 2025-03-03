@@ -17,6 +17,7 @@ import {
     calculateWidthFromCharCount 
 } from './utils';
 import { speakText } from './audio';
+import { getTranslatedHTML } from './helpers';  
 
 // 跟踪当前显示的悬浮窗
 let currentVisiblePopup: HTMLElement | null = null;
@@ -123,45 +124,6 @@ async function translateFullParagraph(targetNode: Element) {
         console.error('翻译过程中出错:', error);
         tempContainer.innerHTML = '翻译失败，请查看控制台获取详细错误信息';
     }
-}
-
-/**
- * 4. 获取翻译后的HTML
- * @param originalHTML 原始HTML
- * @returns 翻译后的HTML
- */
-async function getTranslatedHTML(originalHTML: string): Promise<string> {
-    // 向AI发送完整的HTML标签，请求翻译
-    const stream = await askAIStream(`
-    我会给你一个HTML标签及其内容，请将其中的文本内容翻译成中文，但保持HTML结构和属性不变。
-    
-    原始HTML:
-    ${originalHTML}
-    
-    请返回完整的HTML标签，只将文本内容替换为中文翻译。不要添加任何解释或前缀，直接返回翻译后的HTML。
-    `);
-    
-    let translatedHTML = '';
-    
-    for await (const chunk of stream) {
-        if (chunk) {
-            translatedHTML += chunk;
-        }
-    }
-    
-    console.log('获取到翻译后的HTML:', translatedHTML);
-    
-    // 清理可能的前缀和后缀文本
-    translatedHTML = translatedHTML.trim();
-    
-    // 如果AI返回了带有代码块的回答，提取代码块内容
-    if (translatedHTML.includes('```html')) {
-        translatedHTML = translatedHTML.split('```html')[1].split('```')[0].trim();
-    } else if (translatedHTML.includes('```')) {
-        translatedHTML = translatedHTML.split('```')[1].split('```')[0].trim();
-    }
-    
-    return translatedHTML;
 }
 
 // 处理部分文本的翻译

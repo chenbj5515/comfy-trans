@@ -93,28 +93,3 @@ export async function checkBlacklist() {
         console.error('Error:', e);
     }
 }
-
-/**
- * 根据字符数计算适当的宽度，以保持宽高比接近368:500
- * @param charCount 字符数量
- * @returns 计算得到的宽度（像素）
- */
-export function calculateWidthFromCharCount(charCount: number): number {
-    // 基准数据：361字符对应368px宽，164字符对应280px宽
-    let width = 0;
-    
-    if (charCount <= 100) {
-        width = 250; // 字符很少时的最小宽度
-    } else if (charCount <= 200) {
-        width = 280; // 约164字符时的宽度
-    } else if (charCount <= 300) {
-        width = 320;
-    } else if (charCount <= 400) {
-        width = 368; // 约361字符时的宽度
-    } else {
-        width = 400; // 字符很多时的最大宽度
-    }
-    
-    console.log(`字符数: ${charCount}, 计算宽度: ${width}px`);
-    return width;
-}
