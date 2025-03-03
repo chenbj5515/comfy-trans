@@ -26,14 +26,46 @@ import {
 // 跟踪当前显示的悬浮窗
 let currentVisiblePopup: HTMLElement | null = null;
 
+// 跟踪上一次按C键的时间
+let lastCKeyPressTime = 0;
+
+// 将选中文本复制到剪贴板
+async function copyToClipboard(text: string) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('scrollY', window.scrollY.toString());
+    const data = {
+        text,
+        url: url.toString()
+    };
+    
+    try {
+        await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+        console.log('成功复制到剪贴板:', data);
+    } catch (err) {
+        console.error('复制到剪贴板失败:', err);
+    }
+}
+
 // 初始化函数
 async function initialize() {
     try {    
+        // 检查URL中是否有scrollY参数
+        const url = new URL(window.location.href);
+        const scrollY = url.searchParams.get('scrollY');
+        if (scrollY) {
+            window.scrollTo({
+                top: parseInt(scrollY),
+                behavior: 'smooth'
+            });
+        }
+
         initializeStyles();
         
         // 监听键盘事件
         document.addEventListener('keydown', (e) => {
             console.log('检测到键盘事件:', e.key);
+            
+            // 处理T键事件
             if (e.key.toLowerCase() === 't') {
                 console.log('检测到按键T');
                 const selection = window.getSelection();
@@ -41,12 +73,28 @@ async function initialize() {
                     console.log('没有选中文本');
                     return;
                 }
-                e.preventDefault(); // 阻止默认行为
-                e.stopPropagation(); // 阻止事件冒泡
+                e.preventDefault();
+                e.stopPropagation();
                 console.log('检测到按键T，处理选中文本:', selection.toString().trim());
                 processSelection(selection);
             }
-        }, true); // 添加 true 参数，使用捕获阶段
+            
+            // 处理C键事件
+            if (e.key.toLowerCase() === 'c') {
+                const currentTime = Date.now();
+                console.log('currentTime:', currentTime);
+                console.log('lastCKeyPressTime:', lastCKeyPressTime);
+                if (currentTime - lastCKeyPressTime <= 500) { // 500ms内连续按两次
+                    const selection = window.getSelection();
+                    if (selection && selection.toString().trim()) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        copyToClipboard(selection.toString().trim());
+                    }
+                }
+                lastCKeyPressTime = currentTime;
+            }
+        }, true);
         
         console.log('翻译插件初始化完成');
     } catch (error) {
