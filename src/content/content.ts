@@ -75,12 +75,21 @@ async function processSelection(selection: Selection) {
     }
 
     const range = selection.getRangeAt(0);
-    const targetNode = getTargetNode(range);
+
+    console.log('startContainer:', range.startContainer.nodeType);
+    const targetNode = getTargetNode(range, selectedText);
+
+    console.log('targetNode:', targetNode);
 
     if (!targetNode) {
         console.log('未找到选中文本所在元素');
         return;
     }
+
+    // 获取包含选中文本的段落节点
+    const paragraphNode = targetNode.closest('p') || targetNode;
+    const fullParagraphText = paragraphNode.textContent || '';
+    console.log('整个段落的文本内容:', fullParagraphText);
 
     // 获取选中文本的位置
     const rect = range.getBoundingClientRect();
@@ -98,7 +107,7 @@ async function processSelection(selection: Selection) {
     } else {
         console.log('处理部分文本翻译');
         // 处理部分文本的翻译
-        await translatePartialText(selectedText, x, y, range);
+        await translatePartialText(selectedText, x, y, range, fullParagraphText);
     }
 }
 
@@ -131,7 +140,7 @@ async function translateFullParagraph(targetNode: Element) {
 }
 
 // 处理部分文本的翻译
-async function translatePartialText(selectedText: string, x: number, y: number, range: Range) {
+async function translatePartialText(selectedText: string, x: number, y: number, range: Range, fullParagraphText: string) {
     console.log('开始翻译部分文本:', selectedText, '位置:', x, y);
     
     try {
@@ -160,7 +169,7 @@ async function translatePartialText(selectedText: string, x: number, y: number, 
         originalDiv.appendChild(playButton);
 
         // 6. 发起翻译请求并处理结果
-        const translationPromise = askAI(`请将「${selectedText}」翻译成中文。只输出翻译结果就好，不要输出任何其他内容`);
+        const translationPromise = askAI(`${fullParagraphText}这个句子中的「${selectedText}」翻译成中文。要求你只输出「${selectedText}」对应的中文翻译结果就好，不要输出任何其他内容。`);
         handleTranslationUpdate(translationDiv, originalText, selectedText, translationPromise);
 
         // 7. 获取解释并流式更新

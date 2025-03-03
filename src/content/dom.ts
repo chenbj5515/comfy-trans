@@ -3,11 +3,18 @@ import { speakText } from "./audio";
 import { calculateWidthFromCharCount } from './helpers';
 
 // 获取目标节点
-export function getTargetNode(range: Range): Element | null {
+export function getTargetNode(range: Range, selectedText: string): Element | null {
     let targetNode: Node | null = range.startContainer;
 
     if (targetNode.nodeType === Node.TEXT_NODE) {
         targetNode = targetNode.parentElement;
+    }
+
+    // 如果选中文本长度大于当前节点文本长度,继续往上找父元素
+    while (targetNode && selectedText.length > (targetNode.textContent?.length || 0)) {
+        const parentElement = targetNode.parentElement;
+        if (!parentElement) break;
+        targetNode = parentElement;
     }
 
     return targetNode as Element;
@@ -330,10 +337,11 @@ export function handlePopupDisplay(e: MouseEvent) {
 
 // 判断是否选中了整个段落
 export function isEntireParagraphSelected(targetNode: Element, selectedText: string): boolean {
+    console.log('判断是否选中了整个段落', targetNode, selectedText);
     // 如果选中的文本与节点的文本内容相同，则认为选中了整个段落
     const nodeText = targetNode.textContent?.trim() || '';
     return nodeText === selectedText;
-}
+} 
 
 // 创建弹窗
 export function createPopup(popupId: string): HTMLElement {
@@ -356,7 +364,6 @@ export function createPopup(popupId: string): HTMLElement {
         line-height: 1.5;
         transition: opacity 0.3s ease;
     `;
-    console.log('设置弹窗基本样式');
 
     // 创建内容容器
     const content = document.createElement('div');

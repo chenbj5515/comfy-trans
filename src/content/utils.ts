@@ -72,24 +72,3 @@ export async function addFuriganaToJapanese(text: string): Promise<string> {
         return text; // 出错时返回原文本
     }
 }
-
-export async function checkBlacklist() {
-    try {
-        const hostname = window.location.hostname;
-        // @ts-ignore
-        const result = await chrome.storage.sync.get(['blacklist']);
-        const blacklist = result.blacklist || [];
-        blacklist.push('japanese-memory-rsc.vercel.app');
-
-        console.log('blacklist', blacklist);
-
-        // 如果在黑名单中就直接返回
-        if (blacklist.some((domain: string) => hostname === domain || hostname.endsWith('.' + domain))) {
-            return true;
-        }
-
-        return false;
-    } catch (e) {
-        console.error('Error:', e);
-    }
-}
