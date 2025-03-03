@@ -1,4 +1,6 @@
 import { askAIStream } from "./api";
+import { speakText } from './audio';
+import { isJapaneseText, addFuriganaToJapanese } from './utils';
 
 /**
  * 获取翻译后的HTML
@@ -62,4 +64,138 @@ export function calculateWidthFromCharCount(charCount: number): number {
     
     console.log(`字符数: ${charCount}, 计算宽度: ${width}px`);
     return width;
+}
+
+/**
+ * 创建翻译的div元素
+ */
+export function createTranslationDiv(): HTMLDivElement {
+    const translationDiv = document.createElement('div');
+    translationDiv.className = 'comfy-trans-translation';
+    translationDiv.style.marginBottom = '10px';
+    translationDiv.style.fontWeight = 'bold';
+    translationDiv.style.wordBreak = 'break-word';
+    translationDiv.style.whiteSpace = 'normal';
+    translationDiv.style.fontSize = '14px';
+    translationDiv.style.lineHeight = '1.9';
+    return translationDiv;
+}
+
+/**
+ * 创建解释的div元素
+ */
+export function createExplanationDiv(): HTMLDivElement {
+    const explanationDiv = document.createElement('div');
+    explanationDiv.className = 'comfy-trans-explanation';
+    explanationDiv.style.wordBreak = 'break-word';
+    explanationDiv.style.whiteSpace = 'normal';
+    explanationDiv.style.fontSize = '14px';
+    explanationDiv.style.lineHeight = '1.9';
+    return explanationDiv;
+}
+
+/**
+ * 创建原文的div元素
+ */
+export function createOriginalDiv(selectedText: string): { originalDiv: HTMLDivElement; originalText: HTMLSpanElement } {
+    const originalDiv = document.createElement('div');
+    originalDiv.className = 'comfy-trans-original';
+    originalDiv.style.display = 'flex';
+    originalDiv.style.alignItems = 'center';
+    originalDiv.style.fontSize = '14px';
+    originalDiv.style.lineHeight = '1.9';
+    
+    const originalText = document.createElement('span');
+    originalText.textContent = selectedText;
+    originalText.style.fontWeight = 'bold';
+    originalText.style.fontSize = '14px';
+    originalText.style.lineHeight = '1.9';
+    originalText.style.cursor = 'pointer';
+    originalText.addEventListener('click', () => {
+        speakText(selectedText);
+    });
+    
+    originalDiv.appendChild(originalText);
+    return { originalDiv, originalText };
+}
+
+/**
+ * 创建播放按钮
+ */
+export function createPlayButton(selectedText: string): HTMLSpanElement {
+    const playButton = document.createElement('span');
+    playButton.style.display = 'flex';
+    playButton.style.alignItems = 'center';
+    playButton.style.padding = '5px';
+    playButton.style.cursor = 'pointer';
+    playButton.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" height="18" width="18" style="cursor: pointer;">
+            <path clip-rule="evenodd" fill-rule="evenodd" d="M11.26 3.691A1.2 1.2 0 0 1 12 4.8v14.4a1.199 1.199 0 0 1-2.048.848L5.503 15.6H2.4a1.2 1.2 0 0 1-1.2-1.2V9.6a1.2 1.2 0 0 1 1.2-1.2h3.103l4.449-4.448a1.2 1.2 0 0 1 1.308-.26Z"></path>
+        </svg>
+    `;
+    playButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        speakText(selectedText);
+    });
+    return playButton;
+}
+
+/**
+ * 处理翻译结果的更新
+ */
+export async function handleTranslationUpdate(
+    translationDiv: HTMLDivElement,
+    originalText: HTMLSpanElement,
+    selectedText: string,
+    translationPromise: Promise<string>
+): Promise<void> {
+    translationDiv.textContent = '正在翻译...';
+    const translation = await translationPromise;
+    translationDiv.textContent = translation;
+    
+    // 检查是否为日语文本
+    if (isJapaneseText(selectedText)) {
+        const textWithFurigana = await addFuriganaToJapanese(selectedText);
+        originalText.innerHTML = textWithFurigana;
+    }
+}
+
+/**
+ * 处理解释内容的流式更新
+ */
+export async function handleExplanationStream(
+    explanationDiv: HTMLDivElement,
+    popup: HTMLElement,
+    selectedText: string,
+    translation: string
+): Promise<void> {
+    explanationDiv.innerHTML = '正在分析...';
+    const explanationStream = await askAIStream(
+        `「${selectedText}」这个单词/短语的含义是什么？简洁明了地分析它。如果这个词的词源可考的话也要说明出来。`
+    );
+    
+    explanationDiv.innerHTML = '';
+    let explanation = '';
+    let chunkCount = 0;
+
+    for await (const chunk of explanationStream) {
+        if (explanationDiv && chunk) {
+            explanationDiv.innerHTML += chunk;
+            explanation += chunk;
+            
+            // 每接收10个数据块或累积一定字符数后，重新计算宽度
+            chunkCount++;
+            if (chunkCount % 10 === 0 || explanation.length % 50 === 0) {
+                // 计算总字符数
+                const totalChars = selectedText.length + translation.length + explanation.length;
+                
+                // 计算宽度
+                const width = calculateWidthFromCharCount(totalChars);
+                
+                // 应用新宽度
+                popup.style.width = `${width}px`;
+                popup.style.maxWidth = `${width}px`;
+            }
+        }
+    }
 }
