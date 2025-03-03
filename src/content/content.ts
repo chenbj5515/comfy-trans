@@ -33,6 +33,7 @@ let lastCKeyPressTime = 0;
 async function copyToClipboard(text: string) {
     const url = new URL(window.location.href);
     url.searchParams.set('scrollY', window.scrollY.toString());
+    url.searchParams.set('text', encodeURIComponent(text));
     const data = {
         text,
         url: url.toString()
@@ -49,9 +50,76 @@ async function copyToClipboard(text: string) {
 // 初始化函数
 async function initialize() {
     try {    
-        // 检查URL中是否有scrollY参数
         const url = new URL(window.location.href);
         const scrollY = url.searchParams.get('scrollY');
+        const encodedText = url.searchParams.get('text');
+        if (encodedText) {
+            const decodedText = decodeURIComponent(encodedText);
+            console.log('从 URL 恢复的文本:', decodedText);
+            
+            // 添加CSS样式
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes highlight-flash {
+                    0%, 100% { background-color: transparent; }
+                    50% { background-color: rgba(105, 46, 231, 0.5); }
+                }
+                .highlight-animation {
+                    display: inline-block;
+                    padding: 0 6px;
+                    margin: 0 -6px;
+                    border-radius: 4px;
+                    animation: highlight-flash 1.5s ease-in-out 2;
+                }
+            `;
+            document.head.appendChild(style);
+
+            // 等待滚动完成后查找并高亮文本
+            setTimeout(() => {
+                // 使用 TreeWalker 遍历 DOM 树查找文本节点
+                const treeWalker = document.createTreeWalker(
+                    document.body,
+                    NodeFilter.SHOW_TEXT,
+                    {
+                        acceptNode: function(node) {
+                            return node.textContent?.includes(decodedText)
+                                ? NodeFilter.FILTER_ACCEPT
+                                : NodeFilter.FILTER_REJECT;
+                        }
+                    }
+                );
+
+                let currentNode;
+                while (currentNode = treeWalker.nextNode()) {
+                    const range = document.createRange();
+                    range.selectNode(currentNode);
+                    const rect = range.getBoundingClientRect();
+                    
+                    // 检查元素是否在可视区域内
+                    if (rect.top >= 0 &&
+                        rect.left >= 0 &&
+                        rect.bottom <= window.innerHeight &&
+                        rect.right <= window.innerWidth) {
+                        
+                        // 创建 span 包裹匹配文本
+                        const span = document.createElement('span');
+                        span.textContent = currentNode.textContent;
+                        currentNode.parentNode?.replaceChild(span, currentNode);
+                        
+                        // 添加动画类
+                        span.classList.add('highlight-animation');
+                        
+                        // 动画结束后移除类
+                        span.addEventListener('animationend', () => {
+                            // span.classList.remove('highlight-animation');
+                        });
+                        
+                        break; // 只高亮第一个匹配的可见元素
+                    }
+                }
+            }, 1000); // 给滚动动画留出足够时间
+        }
+        
         if (scrollY) {
             window.scrollTo({
                 top: parseInt(scrollY),
